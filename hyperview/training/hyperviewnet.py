@@ -314,7 +314,7 @@ def main():
 
     # add model specific args depending on chosen model
     temp_args, _ = parser.parse_known_args()
-    elif temp_args.model=='dense':
+    if temp_args.model=='dense':
         parser = DenseNet.add_model_specific_args(parser)
 
     args = parser.parse_args()
