@@ -61,15 +61,16 @@ class DataGenerator():
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
         dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),num_parallel_calls=tf.data.AUTOTUNE)
-        dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
+        #dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform),
-                              num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size, drop_remainder=True).prefetch(tf.data.AUTOTUNE)
+                              num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size, drop_remainder=False).prefetch(tf.data.AUTOTUNE)
 
-        options = tf.data.Options()
-        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
-        # return dataset.with_options(options)
-
-        return dataset.with_options(options)
+        if batch_size<2:
+            return dataset
+        else:
+            options = tf.data.Options()
+            options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+            return dataset.with_options(options)
 
     @staticmethod
     def _load_gt(file_path: str):

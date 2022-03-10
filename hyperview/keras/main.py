@@ -6,16 +6,19 @@ import argparse
 import os
 from math import floor
 import numpy as np
+from tqdm.auto import tqdm
+import csv
 from model_selector import SpatioTemporalModel
 import matplotlib.pyplot as plt
 import keras.backend as K
+import pandas as pd
 
 
 parser = argparse.ArgumentParser(description='HyperView')
 
 parser.add_argument('-m', '--model-type', default=2, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
-parser.add_argument('--num-epochs', default=15, type=int, metavar='NE', help='number of epochs to train (default: 120)')
+parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
 parser.add_argument('-b','--batch-size', default=2, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR', help='learning rate (default: 0.01)')
@@ -37,24 +40,32 @@ parser.add_argument('--log-file', default='performance-logs.csv', type=str, help
 
 args = parser.parse_args()
 
-strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
-print('\n\n\n NUMBER OF DEVICES: {}\n\n\n'.format(strategy.num_replicas_in_sync))
+#strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
+#print('\n\n\n NUMBER OF DEVICES: {}\n\n\n'.format(strategy.num_replicas_in_sync))
 
 
 def main():
-
-    with strategy.scope():
-
-        experiment_log = '{}/m_{}_b_{}_lr_{}'.format(args.out_dir, args.model_type,args.batch_size,args.learning_rate)
-
+        if not os.path.exists(args.out_dir):
+            os.makedirs(args.out_dir)
+        image_shape = (128, 128)
         dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
-                                valid_size=0.2,
-                                image_shape=(128, 128),
-                                batch_size=args.batch_size)
+                            valid_size=0.2,
+                            image_shape=image_shape,
+                            batch_size=args.batch_size)
+    #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
+    #with strategy.scope():
+
+
+
+        experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_s_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,image_shape)
 
         model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
         #model=train_model(model, dataset, experiment_log, warmup=True)
         train_model(model, dataset, experiment_log, warmup=False)
+        evaluate_model(model, dataset)
+    #strategy = tf.distribute.OneDeviceStrategy(0)
+    #with strategy.scope():
+        create_submission(model, dataset,experiment_log)
 
 
 def train_model(model, dataset, log_args, warmup=True):
@@ -102,6 +113,42 @@ def train_model(model, dataset, log_args, warmup=True):
     loss_log = '{}_model_loss.jpg'.format(log_args)
     print_history(history, 'loss', loss_log)
     return model
+
+def evaluate_model(model, generators, logging=True):
+
+    print('EVALUATION SESSION STARTED!')
+    model.summary()
+    tr_loss, tr_mae, tr_mse = model.evaluate(generators.train_reader)
+    val_loss, val_mae, val_mse = model.evaluate(generators.valid_reader)
+    if logging:
+        header = ['out_dir','m','b','l','p','wxh', 'train_loss', 'valid_loss', 'tr_mae','val_mae', 'tr_mse', 'val_mse']
+        info = [args.out_dir, args.model_type,args.batch_size,args.learning_rate,args.pretrained,generators.image_shape, tr_loss, val_loss, tr_mae, val_mae ,tr_mse,val_mse]
+        if not os.path.exists(args.out_dir+'/'+args.log_file):
+            with open(args.out_dir+'/'+args.log_file, 'w') as file:
+                logger = csv.writer(file)
+                logger.writerow(header)
+                logger.writerow(info)
+        else:
+            with open(args.out_dir+'/'+args.log_file, 'a') as file:
+                logger = csv.writer(file)
+                logger.writerow(info)
+
+def create_submission(model, generators,log_args):
+    predictions = []
+    reader=generators.eval_reader
+
+    for X, Y,  in tqdm(reader, total=1154, position=0, leave=True, desc="INFO: evaluating the data .. "):
+        y_pred = model.predict(X)
+        predictions.append(y_pred.squeeze())
+        print(y_pred.squeeze())
+
+    predictions = np.asarray(predictions)
+    print(predictions.shape)
+    submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
+    submission.to_csv('{}_submission.csv'.format(log_args), index_label="sample_index")
+
+
+
 
 def print_history(history, type, file_name):
     fig = plt.figure()
