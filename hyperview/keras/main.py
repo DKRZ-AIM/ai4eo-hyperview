@@ -10,6 +10,7 @@ from model_selector import SpatioTemporalModel
 import matplotlib.pyplot as plt
 import keras.backend as K
 
+
 parser = argparse.ArgumentParser(description='HyperView')
 
 parser.add_argument('-m', '--model-type', default=2, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
@@ -35,24 +36,24 @@ parser.add_argument('--log-file', default='performance-logs.csv', type=str, help
 
 
 args = parser.parse_args()
+
 strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
 print('\n\n\n NUMBER OF DEVICES: {}\n\n\n'.format(strategy.num_replicas_in_sync))
 
 
 def main():
 
-    strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
 
         experiment_log = '{}/m_{}_b_{}_lr_{}'.format(args.out_dir, args.model_type,args.batch_size,args.learning_rate)
 
+        #tf.config.run_functions_eagerly(False)
 
-        dataset=DataGenerator(args.train_dir,args.label_dir,args.eval_dir,
-                              valid_size=0.2,
-                              image_shape=(128,128),
-                              batch_size=args.batch_size)
+        dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
+                                valid_size=0.2,
+                                image_shape=(128, 128),
+                                batch_size=args.batch_size)
 
-        tf.config.run_functions_eagerly(True)
         model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
         model=train_model(model, dataset, experiment_log, warmup=True)
         train_model(model, dataset, experiment_log, warmup=False)
@@ -69,18 +70,20 @@ def train_model(model, dataset, log_args, warmup=True):
         print('TRAINING SESSION STARTED!')
 
     optimizer = Adam(learning_rate=learning_rate)
-    #loss_object = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
-    @tf.function
-    def custom_mse(y_true, y_pred):
 
-        loss = K.square(y_pred - y_true)
-        divider=tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
-        divider=tf.broadcast_to(divider,shape=loss.shape)
-        loss = loss / divider
-        loss = tf.reduce_mean(loss)
-        return loss
+    def custom_mse():
+        @tf.function
+        def mse(y_true,y_pred):
+            loss = K.square(y_pred - y_true)
+            divider=tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
+            #divider=tf.broadcast_to(divider,shape=loss.shape)
+            loss = loss / divider
+            loss = tf.reduce_mean(loss)
+            return loss
+        return mse
 
-    model.compile(optimizer=optimizer, loss=custom_mse, metrics=['mae', 'mse'], run_eagerly=True)
+    loss_object = custom_mse()
+    model.compile(optimizer=optimizer, loss=loss_object, metrics=['mae', 'mse'], run_eagerly=False)
 
     callbacks = [
             ReduceLROnPlateau(verbose=1),

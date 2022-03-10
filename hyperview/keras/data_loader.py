@@ -57,6 +57,7 @@ class DataGenerator():
             return image_shape,label_shape
 
     @staticmethod
+    #@tf.function
     def _get_data_reader(files, labels, batch_size, transform):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
