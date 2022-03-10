@@ -49,7 +49,7 @@ def main():
             os.makedirs(args.out_dir)
         image_shape = (224, 224)
         dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
-                            valid_size=0.2,
+                            valid_size=0.15,
                             image_shape=image_shape,
                             batch_size=args.batch_size)
     #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
