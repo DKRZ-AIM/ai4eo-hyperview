@@ -40,7 +40,7 @@ print('\n\n\n NUMBER OF DEVICES: {}\n\n\n'.format(strategy.num_replicas_in_sync)
 
 def main():
 
-    strategy = tf.distribute.OneDeviceStrategy()
+    strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
 
         experiment_log = '{}/m_{}_b_{}_lr_{}'.format(args.out_dir, args.model_type,args.batch_size,args.learning_rate)
