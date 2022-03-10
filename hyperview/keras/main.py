@@ -141,7 +141,6 @@ def create_submission(model, generators,log_args):
         predictions.append(y_pred.squeeze())
 
     predictions = np.asarray(predictions)
-    print(predictions.shape)
     submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
     submission.to_csv('{}_submission.csv'.format(log_args), index_label="sample_index")
 
