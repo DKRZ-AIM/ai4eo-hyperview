@@ -126,13 +126,13 @@ class DataGenerator():
             feature = augmented['image']
             #feature=feature.transpose((2, 0, 1))
             #feature = np.nan_to_num(feature, nan=np.finfo(float).eps, posinf=np.finfo(float).eps, neginf=-np.finfo(float).eps)
-            feature = tf.cast(feature, tf.double)
+            feature = tf.cast(feature, tf.float32)
 
             return feature
         if transform is not None:
-            feature = tf.numpy_function(func=_aug_fn, inp=[feature], Tout=[tf.double])
+            feature = tf.numpy_function(func=_aug_fn, inp=[feature], Tout=[tf.float32])
 
-        return feature, label
+        return tf.cast(feature, tf.float32), tf.cast(label, tf.float32)
 
     @staticmethod
     def _get_stats(directory: str):

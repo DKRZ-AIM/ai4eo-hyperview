@@ -72,7 +72,7 @@ def train_model(model, dataset, log_args, warmup=True):
 
     @tf.function
     def custom_mse(y_true, y_pred):
-        loss = loss_object(y_true, y_pred) / tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.double)
+        loss = loss_object(y_true, y_pred) / tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
         loss = tf.reduce_mean(loss)
         return loss
 
