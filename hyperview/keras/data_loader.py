@@ -65,7 +65,11 @@ class DataGenerator():
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform),
                               num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size, drop_remainder=True).prefetch(tf.data.AUTOTUNE)
 
-        return dataset
+        options = tf.data.Options()
+        options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
+        # return dataset.with_options(options)
+
+        return dataset.with_options(options)
 
     @staticmethod
     def _load_gt(file_path: str):
