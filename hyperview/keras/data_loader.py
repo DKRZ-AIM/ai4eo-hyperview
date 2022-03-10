@@ -44,7 +44,7 @@ class DataGenerator():
 
         self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans)
         self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,1, eval_trans)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -61,9 +61,9 @@ class DataGenerator():
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
         dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),num_parallel_calls=tf.data.AUTOTUNE)
-        #dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
-        dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform),
-                              num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size, drop_remainder=False).prefetch(tf.data.AUTOTUNE)
+        dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=False)
+        dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform),num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.batch(batch_size, drop_remainder=False,num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
 
         if batch_size<2:
             return dataset

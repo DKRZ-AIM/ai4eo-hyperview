@@ -20,7 +20,7 @@ parser.add_argument('-m', '--model-type', default=2, type=int, metavar='MT', hel
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=2, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -45,38 +45,40 @@ args = parser.parse_args()
 
 
 def main():
-        if not os.path.exists(args.out_dir):
-            os.makedirs(args.out_dir)
-        image_shape = (224, 224)
-        dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
+    if not os.path.exists(args.out_dir):
+        os.makedirs(args.out_dir)
+    image_shape = (64, 64)
+    dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
                             valid_size=0.15,
                             image_shape=image_shape,
                             batch_size=args.batch_size)
-    #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
-    #with strategy.scope():
+    strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
 
-
+    with strategy.scope():
 
         experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_s_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,image_shape)
 
         model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
-        #model=train_model(model, dataset, experiment_log, warmup=True)
+        model=train_model(model, dataset, experiment_log, warmup=True)
         train_model(model, dataset, experiment_log, warmup=False)
         evaluate_model(model, dataset)
-    #strategy = tf.distribute.OneDeviceStrategy(0)
-    #with strategy.scope():
         create_submission(model, dataset,experiment_log)
 
 
 def train_model(model, dataset, log_args, warmup=True):
     if warmup:
         print('\n\nWARM-UP SESSION STARTED!\n\n')
+        for idx in range(len(model.layers) // 2): model.layers[idx].trainable = False
         learning_rate = args.learning_rate / 10
         num_epochs = floor(args.num_epochs / 15)
+
     else:
+        print('\n\nTRAINING SESSION STARTED!\n\n')
+        for idx in range(len(model.layers) // 2): model.layers[idx].trainable = True
+        model.trainable=True
         learning_rate = args.learning_rate
         num_epochs = args.num_epochs
-        print('\n\nTRAINING SESSION STARTED!\n\n')
+
 
     optimizer = Adam(learning_rate=learning_rate)
 
@@ -136,9 +138,11 @@ def create_submission(model, generators,log_args):
     print('\n\nSUBMISSION SESSION STARTED!\n\n')
     predictions = []
     reader=generators.eval_reader
-    for X, Y,  in tqdm(reader, total=1154, position=0, leave=True, desc="INFO: creating submission the data .. "):
+    for X, Y,  in reader:
         y_pred = model.predict(X)
-        predictions.append(y_pred.squeeze())
+        for i in range(len(y_pred)):
+            #print(y_pred[i])
+            predictions.append(y_pred[i])
 
     predictions = np.asarray(predictions)
     submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
