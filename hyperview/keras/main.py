@@ -4,7 +4,7 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, Early
 from tensorflow.keras.optimizers import Nadam, Adam
 import argparse
 import os
-from math import floor
+from math import floor,ceil
 import numpy as np
 from tqdm.auto import tqdm
 import csv
@@ -70,7 +70,7 @@ def train_model(model, dataset, log_args, warmup=True):
         print('\n\nWARM-UP SESSION STARTED!\n\n')
         for idx in range(len(model.layers) // 2): model.layers[idx].trainable = False
         learning_rate = args.learning_rate / 10
-        num_epochs = floor(args.num_epochs / 15)
+        num_epochs = ceil(args.num_epochs / 15)
 
     else:
         print('\n\nTRAINING SESSION STARTED!\n\n')
