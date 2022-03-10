@@ -70,7 +70,7 @@ def train_model(model, dataset, log_args, warmup=True):
     optimizer = Adam(learning_rate=learning_rate)
     loss_object = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
     def custom_mse(y_true, y_pred):
-        loss = loss_object(y_true, y_pred) / tf.constant([1100.0, 2500.0, 2000.0, 3.0])
+        loss = loss_object(y_true, y_pred) / np.array([1100.0, 2500.0, 2000.0, 3.0])
         loss = tf.reduce_mean(loss)
         return loss
 
