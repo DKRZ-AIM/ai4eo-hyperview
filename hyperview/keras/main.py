@@ -21,6 +21,7 @@ parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='st
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
 parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-w','--width', default=64, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -36,86 +37,80 @@ parser.add_argument('--eval-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo-hy
 parser.add_argument('--out-dir', default='modeldir/', type=str, help='Out Directory (default: modeldir)')
 parser.add_argument('--log-file', default='performance-logs.csv', type=str, help='path to log dir (default: logdir)')
 
-
-
 args = parser.parse_args()
-
-#strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
-#print('\n\n\n NUMBER OF DEVICES: {}\n\n\n'.format(strategy.num_replicas_in_sync))
 
 
 def main():
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
+    image_shape = (args.width, args.width)
+    dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
+                            valid_size=0.15,
+                            image_shape=image_shape,
+                            batch_size=args.batch_size)
 
-    strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
 
-    with strategy.scope():
-        image_shape = (64, 64)
-        dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
-                                valid_size=0.15,
-                                image_shape=image_shape,
-                                batch_size=args.batch_size)
 
-        experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_s_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,image_shape)
-
-        model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
-        #model=train_model(model, dataset, experiment_log, warmup=True)
-        train_model(model, dataset, experiment_log, warmup=False)
-        evaluate_model(model, dataset)
-        create_submission(model, dataset,experiment_log)
+    experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,args.width)
+    model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
+    #model=train_model(model, dataset, experiment_log, warmup=True)
+    train_model(model, dataset, experiment_log, warmup=False)
+    evaluate_model(model, dataset)
+    create_submission(model, dataset,experiment_log)
 
 
 def train_model(model, dataset, log_args, warmup=True):
-    if warmup:
-        print('\n\nWARM-UP SESSION STARTED!\n\n')
-        #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = False
-        learning_rate = args.learning_rate / 10
-        num_epochs = ceil(args.num_epochs / 15)
+    #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
+    #with strategy.scope():
+        if warmup:
+            print('\n\nWARM-UP SESSION STARTED!\n\n')
+            #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = False
+            learning_rate = args.learning_rate / 10
+            num_epochs = ceil(args.num_epochs / 15)
 
-    else:
-        print('\n\nTRAINING SESSION STARTED!\n\n')
-        #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = True
-        #model.trainable=True
-        learning_rate = args.learning_rate
-        num_epochs = args.num_epochs
+        else:
+            print('\n\nTRAINING SESSION STARTED!\n\n')
+            #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = True
+            #model.trainable=True
+            learning_rate = args.learning_rate
+            num_epochs = args.num_epochs
 
 
-    optimizer = Adam(learning_rate=learning_rate)
+        optimizer = Adam(learning_rate=learning_rate)
 
-    def custom_mse():
-        @tf.function
-        def mse(y_true,y_pred):
-            loss = K.square(y_pred - y_true)
-            divider=tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
-            #divider=tf.broadcast_to(divider,shape=loss.shape)
-            loss = loss / divider
-            loss = tf.reduce_mean(loss)
-            return loss
-        return mse
+        def custom_mse():
+            @tf.function
+            def mse(y_true,y_pred):
+                loss = K.square(y_pred - y_true)
+                divider=tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
+                #divider=tf.broadcast_to(divider,shape=loss.shape)
+                loss = loss / divider
+                loss = tf.reduce_mean(loss)
+                return loss
+            return mse
 
-    loss_object = custom_mse()
-    model.compile(optimizer=optimizer, loss=loss_object, metrics=['mae', 'mse'], run_eagerly=False)
+        loss_object = custom_mse()
+        model.compile(optimizer=optimizer, loss=loss_object, metrics=['mae', 'mse'], run_eagerly=False)
 
-    callbacks = [
-            ReduceLROnPlateau(verbose=1),
-            EarlyStopping(patience=25),
-            ModelCheckpoint(
-                '{}_model_best.h5'.format(log_args),
-                monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
-            ]
+        callbacks = [
+                ReduceLROnPlateau(verbose=1),
+                EarlyStopping(patience=25),
+                ModelCheckpoint(
+                    '{}_model_best.h5'.format(log_args),
+                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
+                ]
 
-    history = model.fit(dataset.train_reader,
-                            epochs=num_epochs,
-                            workers=args.num_workers,
-                            callbacks=callbacks,
-                            use_multiprocessing=True,
-                            shuffle=True,
-                            validation_data=dataset.valid_reader)
+        history = model.fit(dataset.train_reader,
+                                epochs=num_epochs,
+                                workers=args.num_workers,
+                                callbacks=callbacks,
+                                use_multiprocessing=True,
+                                shuffle=True,
+                                validation_data=dataset.valid_reader)
 
-    loss_log = '{}_model_loss.jpg'.format(log_args)
-    print_history(history, 'loss', loss_log)
-    return model
+        loss_log = '{}_model_loss.jpg'.format(log_args)
+        print_history(history, 'loss', loss_log)
+        return model
 
 def evaluate_model(model, generators, logging=True):
 
@@ -124,7 +119,7 @@ def evaluate_model(model, generators, logging=True):
     val_loss, val_mae, val_mse = model.evaluate(generators.valid_reader)
     if logging:
         header = ['out_dir','m','b','l','p','wxh', 'train_loss', 'valid_loss', 'tr_mae','val_mae', 'tr_mse', 'val_mse']
-        info = [args.out_dir, args.model_type,args.batch_size,args.learning_rate,args.pretrained,generators.image_shape, tr_loss, val_loss, tr_mae, val_mae ,tr_mse,val_mse]
+        info = [args.out_dir, args.model_type,args.batch_size,args.learning_rate,args.pretrained,args.width, tr_loss, val_loss, tr_mae, val_mae ,tr_mse,val_mse]
         if not os.path.exists(args.out_dir+'/'+args.log_file):
             with open(args.out_dir+'/'+args.log_file, 'w') as file:
                 logger = csv.writer(file)
@@ -137,13 +132,14 @@ def evaluate_model(model, generators, logging=True):
 
 def create_submission(model, generators,log_args):
     print('\n\nSUBMISSION SESSION STARTED!\n\n')
-    predictions = []
     reader=generators.eval_reader
+    predictions=[]
     for X, Y,  in reader:
         y_pred = model.predict(X)
-        for i in range(len(y_pred)):
-            #print(y_pred[i])
-            predictions.append(y_pred[i])
+        if len(predictions)==0:
+            predictions=y_pred
+        else:
+            predictions=np.concatenate((predictions,y_pred),axis=0)
 
     predictions = np.asarray(predictions)
     submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
