@@ -20,7 +20,7 @@ parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate the model (it requires the wights path to be given')
-parser.add_argument('-p', '--pretrained', dest='evaluate', action='store_true', help='pretrained or not')
+parser.add_argument('-p', '--pretrained', dest='pretrained', action='store_true', help='pretrained or not')
 parser.add_argument('--cuda', default='all', type=str, help=' cuda devices (default: 0)')
 
 parser.add_argument('--train-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo-hyperview/train_data/train_data/', type=str, help='path to the data directory')
