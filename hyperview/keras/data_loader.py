@@ -57,12 +57,11 @@ class DataGenerator():
             return image_shape,label_shape
 
     @staticmethod
-    #@tf.function
     def _get_data_reader(files, labels, batch_size, transform):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
         dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),num_parallel_calls=tf.data.AUTOTUNE)
-        #dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
+        dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform),
                               num_parallel_calls=tf.data.AUTOTUNE).batch(batch_size, drop_remainder=True).prefetch(tf.data.AUTOTUNE)
 
