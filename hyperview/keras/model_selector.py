@@ -43,7 +43,6 @@ class SpatioTemporalModel(tf.keras.Model):
 
 class BackboneModel(tf.keras.Model):
         def __init__(self, model_type, input_shape,pretrained):
-            #super(BackboneModel, self).__init__()
             inp = tf.keras.layers.Input(shape=input_shape)
             model=None
             if model_type == 0:

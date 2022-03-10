@@ -47,15 +47,13 @@ def main():
 
         experiment_log = '{}/m_{}_b_{}_lr_{}'.format(args.out_dir, args.model_type,args.batch_size,args.learning_rate)
 
-        #tf.config.run_functions_eagerly(False)
-
         dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
                                 valid_size=0.2,
                                 image_shape=(128, 128),
                                 batch_size=args.batch_size)
 
         model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
-        model=train_model(model, dataset, experiment_log, warmup=True)
+        #model=train_model(model, dataset, experiment_log, warmup=True)
         train_model(model, dataset, experiment_log, warmup=False)
 
 
