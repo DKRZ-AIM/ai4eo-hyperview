@@ -51,13 +51,13 @@ class BackboneModel(tf.keras.Model):
 
             if model_type == 1:
                 weights = 'imagenet' if pretrained else None
-                model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=False,
                                                               classifier_activation=tf.keras.layers.LeakyReLU(),
                                                               weights=weights)
 
             if model_type == 2:
                 weights = 'imagenet' if pretrained else None
-                model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=False,
                                                               classifier_activation=tf.keras.layers.LeakyReLU(),
                                                               weights=weights)
 
