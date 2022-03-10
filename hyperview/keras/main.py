@@ -47,7 +47,7 @@ args = parser.parse_args()
 def main():
         if not os.path.exists(args.out_dir):
             os.makedirs(args.out_dir)
-        image_shape = (128, 128)
+        image_shape = (224, 224)
         dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
                             valid_size=0.2,
                             image_shape=image_shape,
