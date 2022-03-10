@@ -20,7 +20,7 @@ parser.add_argument('-m', '--model-type', default=2, type=int, metavar='MT', hel
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=32, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -47,14 +47,15 @@ args = parser.parse_args()
 def main():
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
-    image_shape = (64, 64)
-    dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
-                            valid_size=0.15,
-                            image_shape=image_shape,
-                            batch_size=args.batch_size)
+
     strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
 
     with strategy.scope():
+        image_shape = (64, 64)
+        dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
+                                valid_size=0.15,
+                                image_shape=image_shape,
+                                batch_size=args.batch_size)
 
         experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_s_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,image_shape)
 
