@@ -8,6 +8,7 @@ from math import floor
 import numpy as np
 from model_selector import SpatioTemporalModel
 import matplotlib.pyplot as plt
+import keras.backend as K
 
 parser = argparse.ArgumentParser(description='HyperView')
 
@@ -15,7 +16,7 @@ parser.add_argument('-m', '--model-type', default=2, type=int, metavar='MT', hel
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=15, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=4, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=2, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -68,11 +69,14 @@ def train_model(model, dataset, log_args, warmup=True):
         print('TRAINING SESSION STARTED!')
 
     optimizer = Adam(learning_rate=learning_rate)
-    loss_object = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
-
+    #loss_object = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
     @tf.function
     def custom_mse(y_true, y_pred):
-        loss = loss_object(y_true, y_pred) / tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
+
+        loss = K.square(y_pred - y_true)
+        divider=tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
+        divider=tf.broadcast_to(divider,shape=loss.shape)
+        loss = loss / divider
         loss = tf.reduce_mean(loss)
         return loss
 
