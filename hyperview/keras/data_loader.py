@@ -60,7 +60,7 @@ class DataGenerator():
     def _get_data_reader(files, labels, batch_size, transform):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),cycle_length=4,num_parallel_calls=tf.data.AUTOTUNE)
         dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=False)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform),num_parallel_calls=tf.data.AUTOTUNE)
         dataset = dataset.batch(batch_size, drop_remainder=False,num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)

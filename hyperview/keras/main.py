@@ -20,7 +20,7 @@ parser.add_argument('-m', '--model-type', default=2, type=int, metavar='MT', hel
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=32, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -60,7 +60,7 @@ def main():
         experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_s_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,image_shape)
 
         model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
-        model=train_model(model, dataset, experiment_log, warmup=True)
+        #model=train_model(model, dataset, experiment_log, warmup=True)
         train_model(model, dataset, experiment_log, warmup=False)
         evaluate_model(model, dataset)
         create_submission(model, dataset,experiment_log)
@@ -69,14 +69,14 @@ def main():
 def train_model(model, dataset, log_args, warmup=True):
     if warmup:
         print('\n\nWARM-UP SESSION STARTED!\n\n')
-        for idx in range(len(model.layers) // 2): model.layers[idx].trainable = False
+        #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = False
         learning_rate = args.learning_rate / 10
         num_epochs = ceil(args.num_epochs / 15)
 
     else:
         print('\n\nTRAINING SESSION STARTED!\n\n')
-        for idx in range(len(model.layers) // 2): model.layers[idx].trainable = True
-        model.trainable=True
+        #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = True
+        #model.trainable=True
         learning_rate = args.learning_rate
         num_epochs = args.num_epochs
 
