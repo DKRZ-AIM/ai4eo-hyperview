@@ -70,13 +70,13 @@ def main():
 
 def train_model(model, dataset, log_args, warmup=True):
     if warmup:
-        print('WARM-UP SESSION STARTED!')
+        print('\n\nWARM-UP SESSION STARTED!\n\n')
         learning_rate = args.learning_rate / 10
         num_epochs = floor(args.num_epochs / 15)
     else:
         learning_rate = args.learning_rate
         num_epochs = args.num_epochs
-        print('TRAINING SESSION STARTED!')
+        print('\n\nTRAINING SESSION STARTED!\n\n')
 
     optimizer = Adam(learning_rate=learning_rate)
 
@@ -116,8 +116,7 @@ def train_model(model, dataset, log_args, warmup=True):
 
 def evaluate_model(model, generators, logging=True):
 
-    print('EVALUATION SESSION STARTED!')
-    model.summary()
+    print('\n\nEVALUATION SESSION STARTED!\n\n')
     tr_loss, tr_mae, tr_mse = model.evaluate(generators.train_reader)
     val_loss, val_mae, val_mse = model.evaluate(generators.valid_reader)
     if logging:
@@ -134,13 +133,12 @@ def evaluate_model(model, generators, logging=True):
                 logger.writerow(info)
 
 def create_submission(model, generators,log_args):
+    print('\n\nSUBMISSION SESSION STARTED!\n\n')
     predictions = []
     reader=generators.eval_reader
-
-    for X, Y,  in tqdm(reader, total=1154, position=0, leave=True, desc="INFO: evaluating the data .. "):
+    for X, Y,  in tqdm(reader, total=1154, position=0, leave=True, desc="INFO: creating submission the data .. "):
         y_pred = model.predict(X)
         predictions.append(y_pred.squeeze())
-        print(y_pred.squeeze())
 
     predictions = np.asarray(predictions)
     print(predictions.shape)
