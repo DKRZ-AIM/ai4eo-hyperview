@@ -2,6 +2,9 @@ import tensorflow as tf
 from tensorflow.keras.layers import *
 import tensorflow_addons as tfa
 from backbone_models.swin_transformer import SwinTransformer
+from backbone_models.mobile_vit import MobileVit
+from backbone_models.vit import ViT
+from tensorflow.keras import activations
 
 class SpatioTemporalModel(tf.keras.Model):
 
@@ -21,7 +24,6 @@ class SpatioTemporalModel(tf.keras.Model):
         #backbone.summary()
 
 
-
         multi_chanel_model = tf.keras.Sequential()
         multi_chanel_model.add(TimeDistributed(backbone, input_shape=feature.shape[1:]))
         multi_chanel_model.add(Flatten())
@@ -39,11 +41,11 @@ class SpatioTemporalModel(tf.keras.Model):
         input_layer = Input(shape=(16,))
         reg_head=tf.keras.Sequential()
         #reg_head.add(InputLayer())
-        #reg_head.add(Dropout(0.5))
-        #reg_head.add(BatchNormalization())
-        #reg_head.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
         reg_head.add(Dropout(0.25))
         reg_head.add(BatchNormalization())
+        #reg_head.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
+        #reg_head.add(Dropout(0.5))
+        #reg_head.add(BatchNormalization())
         reg_head.add(Dense(1, activation=tf.keras.layers.LeakyReLU()))
 
         P_model = tf.keras.Model(input_layer, reg_head(input_layer),name='P')
@@ -51,12 +53,18 @@ class SpatioTemporalModel(tf.keras.Model):
         Mg_model = tf.keras.Model(input_layer, reg_head(input_layer), name='Mg')
         pH_model = tf.keras.Model(input_layer, reg_head(input_layer), name='pH')
 
-
         fet_out=multi_chanel_model(feature)
         P_out = P_model(fet_out)
         K_out = K_model(fet_out)
         Mg_out = Mg_model(fet_out)
         pH_out = pH_model(fet_out)
+
+        #[P_logit,K_logit,Mg_logit,pH_logit]=tf.unstack(fet_out, axis=-1)
+        #fet_out = Layer(trainable=False,name='total')(fet_out)
+        #P_out = Activation(activation=activations.linear,name='P')(P_logit)
+        #K_out = Activation(activation=activations.linear, name='K')(K_logit)
+        #Mg_out = Activation(activation=activations.linear, name='Mg')(Mg_logit)
+        #pH_out = Activation(activation=activations.linear, name='pH')(pH_logit)
 
 
         super(SpatioTemporalModel, self).__init__(inputs=temporal_input, outputs=[P_out,K_out,Mg_out,pH_out])
@@ -68,34 +76,38 @@ class BackboneModel(tf.keras.Model):
             model=None
             weights = 'imagenet' if pretrained else None
             if model_type == 0:
-                model=SwinTransformer('swin_tiny_128', num_classes=1000, include_top=False, pretrained=pretrained)
+                model=SwinTransformer('swin_tiny_128', num_classes=1000, include_top=True, pretrained=pretrained)
 
             if model_type == 1:
-                model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=False,
+                model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
 
             if model_type == 2:
-                model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=False,
+                model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 3:
-                model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=False,
+                model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 4:
-                model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=False,
+                model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 5:
-                model=tf.keras.applications.Xception(input_shape=input_shape, include_top=False,
+                model=tf.keras.applications.Xception(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 6:
-                model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=False,
+                model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
+            if model_type == 7:
+                model=MobileVit(input_shape=input_shape, include_top=True,classifier_activation=None)
 
+            if model_type == 8:
+                model = ViT(input_shape=input_shape, include_top=True, classifier_activation=None)
 
             single_channel_header = tf.keras.Sequential()
             single_channel_header.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))

@@ -188,8 +188,8 @@ class DataGenerator():
     def _init_transform(image_shape, train_stats, eval_stats):
         train_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
-            #A.Normalize(mean=train_stats[0], std=train_stats[1], max_pixel_value=np.max(train_stats[2])),
-            A.GaussNoise(var_limit=0.0001),
+            A.Normalize(mean=train_stats[0], std=train_stats[1], max_pixel_value=np.max(train_stats[2])),
+            A.GaussNoise(var_limit=0.0025),
             A.RandomRotate90(),
             A.Rotate(),
             A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.98, 1.02), p=0.5),
@@ -201,14 +201,14 @@ class DataGenerator():
 
         valid_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
-            #A.Normalize(mean=train_stats[0], std=eval_stats[0], max_pixel_value=np.max(train_stats[2])),
+            A.Normalize(mean=train_stats[0], std=eval_stats[0], max_pixel_value=np.max(train_stats[2])),
             A.RandomRotate90(),
             A.Flip(),
         ])
 
         eval_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
-            #A.Normalize(mean=eval_stats[0], std=eval_stats[1], max_pixel_value=np.max(eval_stats[2]))
+            A.Normalize(mean=eval_stats[0], std=eval_stats[1], max_pixel_value=np.max(eval_stats[2]))
             ])
 
         return train_transform, valid_transform, eval_transform
