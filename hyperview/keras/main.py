@@ -56,7 +56,7 @@ def main():
     model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
     #model=train_model(model, dataset, experiment_log, warmup=True)
     train_model(model, dataset, experiment_log, warmup=False)
-    #evaluate_model(model, dataset)
+    evaluate_model(model, dataset)
     create_submission(model, dataset,experiment_log)
 
 
