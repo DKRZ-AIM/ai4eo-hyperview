@@ -66,20 +66,36 @@ class BackboneModel(tf.keras.Model):
         def __init__(self, model_type, input_shape,pretrained):
             inp = tf.keras.layers.Input(shape=input_shape)
             model=None
+            weights = 'imagenet' if pretrained else None
             if model_type == 0:
-                model=SwinTransformer('swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
+                model=SwinTransformer('swin_tiny_128', num_classes=1000, include_top=False, pretrained=pretrained)
 
             if model_type == 1:
-                weights = 'imagenet' if pretrained else None
                 model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=False,
-                                                              classifier_activation=tf.keras.layers.LeakyReLU(),
+                                                              classifier_activation=None,
                                                               weights=weights)
 
             if model_type == 2:
-                weights = 'imagenet' if pretrained else None
                 model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=False,
-                                                              classifier_activation=tf.keras.layers.LeakyReLU(),
+                                                              classifier_activation=None,
                                                               weights=weights)
+            if model_type == 3:
+                model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=False,
+                                                              classifier_activation=None,
+                                                              weights=weights)
+            if model_type == 4:
+                model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=False,
+                                                              classifier_activation=None,
+                                                              weights=weights)
+            if model_type == 5:
+                model=tf.keras.applications.Xception(input_shape=input_shape, include_top=False,
+                                                              classifier_activation=None,
+                                                              weights=weights)
+            if model_type == 6:
+                model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=False,
+                                                              classifier_activation=None,
+                                                              weights=weights)
+
 
             single_channel_header = tf.keras.Sequential()
             single_channel_header.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))

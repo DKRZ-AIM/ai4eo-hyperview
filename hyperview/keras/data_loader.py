@@ -54,7 +54,7 @@ class DataGenerator():
         for feature, mask, in reader.take(1):
             image_shape=tuple([1, feature.shape[-3],feature.shape[-2],feature.shape[-1]])
             label_shape=mask.shape[-1]
-            return image_shape,label_shape
+            return image_shape,label_shape,
 
     @staticmethod
     def _get_data_reader(files, labels, batch_size, transform, eval=False):

@@ -12,16 +12,17 @@ from model_selector import SpatioTemporalModel
 import matplotlib.pyplot as plt
 import keras.backend as K
 import pandas as pd
+import tensorflow_addons as tfa
 
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=2, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=0, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
-parser.add_argument('-w','--width', default=64, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
+parser.add_argument('-b','--batch-size', default=2, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-w','--width', default=112, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.2, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -76,7 +77,15 @@ def train_model(model, dataset, log_args, warmup=True):
             num_epochs = args.num_epochs
 
 
-        optimizer = Adam(learning_rate=learning_rate)
+        maximal_learning_rate=learning_rate*100
+        clr = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=learning_rate,
+                                          maximal_learning_rate= maximal_learning_rate,
+                                          scale_fn=lambda x: 1 / (2. ** (x - 1)),
+                                          step_size=250
+                                          )
+
+        optimizer = Adam(learning_rate=clr)
+        #moving_avg_optimizer = tfa.optimizers.SWA(optimizer)
 
         lossWeights = {"P": 1/1100, "K": 1/2500,"Mg": 1/2000,"pH": 1/3}
 
@@ -85,8 +94,8 @@ def train_model(model, dataset, log_args, warmup=True):
         callbacks = [
                 ReduceLROnPlateau(verbose=1),
                 EarlyStopping(patience=25),
-                ModelCheckpoint(
-                    '{}_model_best.h5'.format(log_args),
+                ModelCheckpoint(#update_weights=True,
+                    filepath='{}_model_best.h5'.format(log_args),
                     monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
                 ]
 
