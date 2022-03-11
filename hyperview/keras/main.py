@@ -17,13 +17,13 @@ import tensorflow_addons as tfa
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=8, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
 parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
-parser.add_argument('-w','--width', default=128, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
-parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
+parser.add_argument('-w','--width', default=64, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
+parser.add_argument('-l','--learning-rate', default=0.1, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate the model (it requires the wights path to be given')
@@ -46,7 +46,7 @@ def main():
         os.makedirs(args.out_dir)
     image_shape = (args.width, args.width)
     dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
-                            valid_size=0.15,
+                            valid_size=0.20,
                             image_shape=image_shape,
                             batch_size=args.batch_size)
 
