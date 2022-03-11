@@ -32,13 +32,34 @@ class SpatioTemporalModel(tf.keras.Model):
         #multi_chanel_model.add(Dropout(0.5))
         #multi_chanel_model.add(BatchNormalization())
         multi_chanel_model.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.5))
-        multi_chanel_model.add(BatchNormalization())
+        #multi_chanel_model.add(Dropout(0.5))
+        #multi_chanel_model.add(BatchNormalization())
+        #multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
 
-        multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
+        input_layer = Input(shape=(16,))
+        reg_head=tf.keras.Sequential()
+        reg_head.add(input_layer)
+        #reg_head.add(Dropout(0.5))
+        #reg_head.add(BatchNormalization())
+        #reg_head.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
+        reg_head.add(Dropout(0.25))
+        reg_head.add(BatchNormalization())
+        reg_head.add(Dense(1, activation=tf.keras.layers.LeakyReLU()))
+
+        P_model = tf.keras.Model(input_layer, reg_head(input_layer),name='P')
+        K_model = tf.keras.Model(input_layer, reg_head(input_layer), name='K')
+        Mg_model = tf.keras.Model(input_layer, reg_head(input_layer), name='Mg')
+        pH_model = tf.keras.Model(input_layer, reg_head(input_layer), name='pH')
 
 
-        super(SpatioTemporalModel, self).__init__(inputs=temporal_input, outputs=multi_chanel_model(feature))
+        fet_out=multi_chanel_model(feature)
+        P_out = P_model(fet_out)
+        K_out = K_model(fet_out)
+        Mg_out = Mg_model(fet_out)
+        pH_out = pH_model(fet_out)
+
+
+        super(SpatioTemporalModel, self).__init__(inputs=temporal_input, outputs=[P_out,K_out,Mg_out,pH_out])
 
 
 class BackboneModel(tf.keras.Model):
@@ -68,7 +89,7 @@ class BackboneModel(tf.keras.Model):
             #single_channel_header.add(Dropout(0.5))
             #single_channel_header.add(BatchNormalization())
             single_channel_header.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
-            single_channel_header.add(Dropout(0.5))
+            single_channel_header.add(Dropout(0.25))
             single_channel_header.add(BatchNormalization())
 
             single_out = single_channel_header(model(inp))

@@ -44,7 +44,7 @@ class DataGenerator():
 
         self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans)
         self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,eval=True)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -57,13 +57,14 @@ class DataGenerator():
             return image_shape,label_shape
 
     @staticmethod
-    def _get_data_reader(files, labels, batch_size, transform):
+    def _get_data_reader(files, labels, batch_size, transform, eval=False):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),cycle_length=8,num_parallel_calls=tf.data.AUTOTUNE)
-        dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=False)
-        dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform),num_parallel_calls=tf.data.AUTOTUNE)
-        dataset = dataset.batch(batch_size, drop_remainder=False,num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),cycle_length=batch_size,num_parallel_calls=batch_size)
+        if not eval:
+            dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
+        dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval),num_parallel_calls=batch_size)
+        dataset = dataset.batch(batch_size, drop_remainder=False,num_parallel_calls=batch_size).prefetch(tf.data.AUTOTUNE)
 
         #if batch_size<2:
         return dataset
@@ -117,10 +118,10 @@ class DataGenerator():
                 return image
         [image ] = tf.py_function(_read_npz, [filename], [tf.float32])
 
-        return tf.data.Dataset.from_tensors((image, label))
+        return tf.data.Dataset.from_tensors((image, label,filename))
 
     @staticmethod
-    def _trans_single_image(feature,label,transform=None):
+    def _trans_single_image(feature,label,filename,transform=None,eval=True):
         def _aug_fn(image):
 
             augmented = transform(image=image)
@@ -132,8 +133,10 @@ class DataGenerator():
             return feature
         if transform is not None:
             feature = tf.numpy_function(func=_aug_fn, inp=[feature], Tout=[tf.float32])
-
-        return tf.cast(feature, tf.float32), tf.cast(label, tf.float32)
+        if not eval:
+            return tf.cast(feature, tf.float32), tf.cast(label, tf.float32)
+        else:
+            return tf.cast(feature, tf.float32), tf.cast(label, tf.float32),filename
 
     @staticmethod
     def _get_stats(directory: str):

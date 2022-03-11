@@ -55,7 +55,7 @@ def main():
     model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
     #model=train_model(model, dataset, experiment_log, warmup=True)
     train_model(model, dataset, experiment_log, warmup=False)
-    evaluate_model(model, dataset)
+    #evaluate_model(model, dataset)
     create_submission(model, dataset,experiment_log)
 
 
@@ -78,19 +78,9 @@ def train_model(model, dataset, log_args, warmup=True):
 
         optimizer = Adam(learning_rate=learning_rate)
 
-        def custom_mse():
-            @tf.function
-            def mse(y_true,y_pred):
-                loss = K.square(y_pred - y_true)
-                divider=tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
-                #divider=tf.broadcast_to(divider,shape=loss.shape)
-                loss = loss / divider
-                loss = tf.reduce_mean(loss)
-                return loss
-            return mse
+        lossWeights = {"P": 1/1100, "K": 1/2500,"Mg": 1/2000,"pH": 1/3}
 
-        loss_object = custom_mse()
-        model.compile(optimizer=optimizer, loss=loss_object, metrics=['mae', 'mse'], run_eagerly=False)
+        model.compile(optimizer=optimizer, loss='mse', loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
                 ReduceLROnPlateau(verbose=1),
@@ -108,18 +98,28 @@ def train_model(model, dataset, log_args, warmup=True):
                                 shuffle=True,
                                 validation_data=dataset.valid_reader)
 
-        loss_log = '{}_model_loss.jpg'.format(log_args)
+        loss_log = '{}_total_loss.jpg'.format(log_args)
         print_history(history, 'loss', loss_log)
+        loss_log = '{}_P_loss.jpg'.format(log_args)
+        print_history(history, 'P_loss', loss_log)
+        loss_log = '{}_K_loss.jpg'.format(log_args)
+        print_history(history, 'K_loss', loss_log)
+        loss_log = '{}_Mg_loss.jpg'.format(log_args)
+        print_history(history, 'Mg_loss', loss_log)
+        loss_log = '{}_K_loss.jpg'.format(log_args)
+        print_history(history, 'pH_loss', loss_log)
+
         return model
 
 def evaluate_model(model, generators, logging=True):
 
     print('\n\nEVALUATION SESSION STARTED!\n\n')
-    tr_loss, tr_mae, tr_mse = model.evaluate(generators.train_reader)
-    val_loss, val_mae, val_mse = model.evaluate(generators.valid_reader)
+    tr_loss = model.evaluate(generators.train_reader)
+    val_loss = model.evaluate(generators.valid_reader)
     if logging:
-        header = ['out_dir','m','b','l','p','wxh', 'train_loss', 'valid_loss', 'tr_mae','val_mae', 'tr_mse', 'val_mse']
-        info = [args.out_dir, args.model_type,args.batch_size,args.learning_rate,args.pretrained,args.width, tr_loss, val_loss, tr_mae, val_mae ,tr_mse,val_mse]
+        header = ['out_dir','m','b','l','p','wxh', 'train_loss', 'valid_loss', 'P','P_val','K','K_val', 'Mg','Mg_val','pH', 'pH_val']
+        info = [args.out_dir, args.model_type,args.batch_size,args.learning_rate,args.pretrained,args.width,
+                tr_loss[0], val_loss[0], tr_loss[1], val_loss[1],tr_loss[2], val_loss[2], tr_loss[3], val_loss[3],tr_loss[4], val_loss[4]]
         if not os.path.exists(args.out_dir+'/'+args.log_file):
             with open(args.out_dir+'/'+args.log_file, 'w') as file:
                 logger = csv.writer(file)
@@ -133,16 +133,25 @@ def evaluate_model(model, generators, logging=True):
 def create_submission(model, generators,log_args):
     print('\n\nSUBMISSION SESSION STARTED!\n\n')
     reader=generators.eval_reader
-    predictions=[]
-    for X, Y,  in reader:
+    predictions = []
+    files = []
+    for X, Y, file_name  in reader:
+        #print(file_name)
         y_pred = model.predict(X)
+        y_pred = np.concatenate(y_pred,axis=1)
         if len(predictions)==0:
             predictions=y_pred
+            files=file_name.numpy()
         else:
             predictions=np.concatenate((predictions,y_pred),axis=0)
+            files=np.concatenate((files,file_name.numpy()))
+    sample_index = np.expand_dims(np.array([int(os.path.basename(f.decode('utf-8')).replace(".npz", "")) for f in files]),1)
+    predictions = np.concatenate((sample_index, predictions), axis=1)
 
-    predictions = np.asarray(predictions)
-    submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
+    #predictions = np.asarray(predictions)
+    submission = pd.DataFrame(data=predictions, columns=['temp_index',"P", "K", "Mg", "pH"])
+    submission=submission.sort_values(by='temp_index',ascending=True)
+    submission=submission.drop(columns='temp_index')
     submission.to_csv('{}_submission.csv'.format(log_args), index_label="sample_index")
 
 
@@ -161,3 +170,23 @@ def print_history(history, type, file_name):
 
 if __name__ == '__main__':
     main()
+
+
+
+ #def custom_mse():
+        #    @tf.function
+        #    def mse_1(y_true,y_pred):
+        #        loss = K.square(y_pred - y_true)
+        #        divider=tf.constant([1100.0, 2500.0, 2000.0, 3.0],dtype=tf.float32)
+        #        #divider=tf.broadcast_to(divider,shape=loss.shape)
+        #        loss = loss / divider
+        #        loss = tf.reduce_mean(loss)
+        #        return loss
+        #    def mse_2(y_true,y_pred):
+        #        loss = K.square(y_pred - y_true)
+        #        loss = tf.reduce_mean(loss)
+        #        return loss
+        #    return mse_2
+        #loss_object = custom_mse()
+        #losses = {"P": "mse","K": "mse",}
+        # loss_object =mse = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses_utils)
