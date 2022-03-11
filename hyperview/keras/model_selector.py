@@ -38,7 +38,7 @@ class SpatioTemporalModel(tf.keras.Model):
 
         input_layer = Input(shape=(16,))
         reg_head=tf.keras.Sequential()
-        reg_head.add(input_layer)
+        #reg_head.add(InputLayer())
         #reg_head.add(Dropout(0.5))
         #reg_head.add(BatchNormalization())
         #reg_head.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
