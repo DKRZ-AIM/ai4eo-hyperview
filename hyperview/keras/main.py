@@ -17,7 +17,7 @@ import tensorflow_addons as tfa
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=3, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
@@ -77,14 +77,14 @@ def train_model(model, dataset, log_args, warmup=True):
             num_epochs = args.num_epochs
 
 
-        maximal_learning_rate=learning_rate*100
-        clr = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=learning_rate,
-                                          maximal_learning_rate= maximal_learning_rate,
-                                          scale_fn=lambda x: 1 / (2. ** (x - 1)),
-                                          step_size=250
-                                          )
+        #maximal_learning_rate=learning_rate*100
+        #clr = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=learning_rate,
+        #                                  maximal_learning_rate= maximal_learning_rate,
+        #                                  scale_fn=lambda x: 1 / (2. ** (x - 1)),
+        #                                  step_size=250
+        #                                  )
 
-        optimizer = Adam(learning_rate=clr)
+        optimizer = Adam(learning_rate=learning_rate)
         #moving_avg_optimizer = tfa.optimizers.SWA(optimizer)
 
         lossWeights = {"P": 1/1100, "K": 1/2500,"Mg": 1/2000,"pH": 1/3}
