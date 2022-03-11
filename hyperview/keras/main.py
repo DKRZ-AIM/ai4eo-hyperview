@@ -95,7 +95,7 @@ def train_model(model, dataset, log_args, warmup=True):
                 ReduceLROnPlateau(verbose=1),
                 EarlyStopping(patience=25),
                 ModelCheckpoint(#update_weights=True,
-                    filepath='{}_model_best.h5'.format(log_args),
+                    filepath='{}_model_best.tf'.format(log_args),
                     monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
                 ]
 
