@@ -55,7 +55,7 @@ def main():
     experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,args.width)
     model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
     #model=train_model(model, dataset, experiment_log, warmup=True)
-    train_model(model, dataset, experiment_log, warmup=False)
+    model=train_model(model, dataset, experiment_log, warmup=False)
     evaluate_model(model, dataset)
     create_submission(model, dataset,experiment_log)
 
@@ -94,9 +94,9 @@ def train_model(model, dataset, log_args, warmup=True):
         callbacks = [
                 ReduceLROnPlateau(verbose=1),
                 EarlyStopping(patience=25),
-                ModelCheckpoint(#update_weights=True,
-                    filepath='{}_model_best.tf'.format(log_args),
-                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
+                #ModelCheckpoint(#update_weights=True,
+                #    filepath='{}_model_best.tf'.format(log_args),
+                #    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
                 ]
 
         history = model.fit(dataset.train_reader,
