@@ -23,7 +23,7 @@ parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='num
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
 parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-w','--width', default=64, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
-parser.add_argument('-l','--learning-rate', default=0.1, type=float, metavar='LR', help='learning rate (default: 0.01)')
+parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate the model (it requires the wights path to be given')
@@ -88,6 +88,7 @@ def train_model(model, dataset, log_args, warmup=True):
         #moving_avg_optimizer = tfa.optimizers.SWA(optimizer)
 
 
+        mse_total = custom_mse()
         mse0 = custom_mse(idx=0)
         mse1 = custom_mse(idx=1)
         mse2 = custom_mse(idx=2)
@@ -95,8 +96,8 @@ def train_model(model, dataset, log_args, warmup=True):
         # mse = tf.keras.losses.MeanSquaredError(reduction = tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
         # lossWeights = {"total": 1, "P": 0 / 1100, "K": 0 / 2500, "Mg": 0 / 2000, "pH": 0 / 3}
 
-        losses = {"P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
-        lossWeights = {"P": 0.25 , "K": 0.25 , "Mg": 0.25 , "pH": 0.25 }
+        losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
+        lossWeights = {"total": 0, "P": 0.25 , "K": 0.25 , "Mg": 0.25 , "pH": 0.25 }
         model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
@@ -155,7 +156,8 @@ def create_submission(model, reader,log_args):
     files = []
     for X, Y, file_name  in reader:
         y_pred = model.predict(X)
-        y_pred = np.concatenate(y_pred,axis=1)
+        y_pred = y_pred[0]
+        #y_pred = np.concatenate(y_pred,axis=1)
         if len(predictions)==0:
             predictions=y_pred
             files=file_name.numpy()
@@ -176,8 +178,8 @@ def challenge_eval(model, reader):
     ground_truth = []
     for X, Y  in reader:
         y_pred = model.predict(X)
-        #y_pred = y_pred[0]
-        y_pred = np.concatenate(y_pred,axis=1)
+        y_pred = y_pred[0]
+        #y_pred = np.concatenate(y_pred,axis=1)
         if len(predictions)==0:
             predictions = y_pred
             ground_truth=Y.numpy()
