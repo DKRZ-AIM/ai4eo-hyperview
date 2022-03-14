@@ -93,7 +93,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
 
         multi_chanel_model = tf.keras.Sequential(name='total')
-        multi_chanel_model.add(Flatten())
+        multi_chanel_model.add(Flatten(name='freeze_points'))
         multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
         multi_chanel_model.add(Dropout(0.25))
         multi_chanel_model.add(BatchNormalization())
@@ -175,7 +175,7 @@ class BackboneModel(tf.keras.Model):
             single_out = single_channel_header(model(inp))
             #backbone_with_head = tf.keras.Model(single_in, single_out)
 
-            super(BackboneModel, self).__init__(inputs=inp, outputs=single_out)
+            super(BackboneModel, self).__init__(inputs=inp, outputs=single_out,name='backbone_model')
 
 
         def compute_output_shape(self, input_shape):

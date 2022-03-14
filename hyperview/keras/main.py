@@ -69,14 +69,21 @@ def train_model(model, dataset, log_args, warmup=True):
     #with strategy.scope():
         if warmup:
             print('\n\nWARM-UP SESSION STARTED!\n\n')
-            #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = False
+            for idx in range(len(model.submodules)):
+                if 'backbone_model' in model.submodules[idx].name:
+                    model.submodules[idx].trainable=False
+                    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = False
+
             learning_rate = args.learning_rate / 10
             num_epochs = ceil(args.num_epochs / 15)
 
         else:
             print('\n\nTRAINING SESSION STARTED!\n\n')
-            #for idx in range(len(model.layers) // 2): model.layers[idx].trainable = True
-            #model.trainable=True
+            for idx in range(len(model.submodules)):
+                if 'backbone_model' in model.submodules[idx].name:
+                    model.submodules[idx].trainable = True
+                    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = True
+            model.trainable=True
             learning_rate = args.learning_rate
             num_epochs = args.num_epochs
 
