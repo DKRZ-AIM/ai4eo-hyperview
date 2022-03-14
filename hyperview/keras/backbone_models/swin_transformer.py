@@ -1,9 +1,10 @@
 import numpy as np
 import tensorflow as tf
+import os
 from tensorflow.keras.layers import Dense, Dropout, Conv2D, LayerNormalization, GlobalAveragePooling1D
 
 CFGS = {
-    'swin_tiny_128': dict(input_size=(128, 128), window_size=7, embed_dim=96, depths=[2, 2, 6, 2],num_heads=[3, 6, 12, 24]),
+    'swin_tiny_224': dict(input_size=(224, 224), window_size=7, embed_dim=96, depths=[2, 2, 6, 2],num_heads=[3, 6, 12, 24]),
     'swin_small_224': dict(input_size=(224, 224), window_size=7, embed_dim=96, depths=[2, 2, 18, 2], num_heads=[3, 6, 12, 24]),
     'swin_base_224': dict(input_size=(224, 224), window_size=7, embed_dim=128, depths=[2, 2, 18, 2], num_heads=[4, 8, 16, 32]),
     'swin_base_384': dict(input_size=(384, 384), window_size=12, embed_dim=128, depths=[2, 2, 18, 2], num_heads=[4, 8, 16, 32]),
@@ -440,7 +441,7 @@ def SwinTransformer(model_name='swin_tiny_224', num_classes=1000, include_top=Tr
     if pretrained is True:
         url = f'https://github.com/rishigami/Swin-Transformer-TF/releases/download/v0.1-tf-swin-weights/{model_name}.tgz'
         pretrained_ckpt = tf.keras.utils.get_file(
-            model_name, url, untar=True)
+            model_name, url, untar=True,cache_dir=os.path.join(os.getcwd(), 'models/'))
     else:
         pretrained_ckpt = pretrained
 

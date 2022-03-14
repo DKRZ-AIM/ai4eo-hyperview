@@ -5,10 +5,8 @@ from backbone_models.swin_transformer import SwinTransformer
 from backbone_models.mobile_vit import MobileVit
 from backbone_models.vit import ViT
 from tensorflow.keras import activations
-import ssl
-ssl._create_default_https_context = ssl._create_unverified_context
 import os
-os.environ['KERAS_HOME'] = os.path.join(os.getcwd(), 'keras')
+
 
 class SpatioMultiChannellModel(tf.keras.Model):
 
@@ -113,34 +111,47 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
 class BackboneModel(tf.keras.Model):
         def __init__(self, model_type, input_shape,pretrained):
+
             inp = tf.keras.layers.Input(shape=input_shape)
             model=None
             weights = 'imagenet' if pretrained else None
             if model_type == 0:
-                model=SwinTransformer('swin_tiny_128', num_classes=1000, include_top=True, pretrained=pretrained)
+                model=SwinTransformer('swin_tiny_224', num_classes=1000, include_top=True, pretrained=pretrained)
 
             if model_type == 1:
+                if weights=='imagenet':
+                    weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_small_224_1.0_float.h5')
                 model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
 
             if model_type == 2:
+                if weights=='imagenet':
+                    weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_large_224_1.0_float.h5')
                 model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 3:
+                if weights=='imagenet':
+                    weights=os.path.join(os.getcwd(), 'models/efficientnetv2-s.h5')
                 model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 4:
+                if weights=='imagenet':
+                    weights=os.path.join(os.getcwd(), 'models/evgg19_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 5:
+                if weights=='imagenet':
+                    weights=os.path.join(os.getcwd(), 'models/xception_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.Xception(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 6:
+                if weights=='imagenet':
+                    weights=os.path.join(os.getcwd(), 'models/resnet50v2_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=True,
                                                               classifier_activation=None,
                                                               weights=weights)
