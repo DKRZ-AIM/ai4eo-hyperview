@@ -109,7 +109,7 @@ def train_model(model, dataset, log_args, warmup=True):
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
         lossWeights = {"total": 0, "P": 0.25 , "K": 0.25 , "Mg": 0.25 , "pH": 0.25 }
-        model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=True)
+        model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
                 ReduceLROnPlateau(verbose=1),
