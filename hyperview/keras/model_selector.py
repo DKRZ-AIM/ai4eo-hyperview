@@ -6,37 +6,18 @@ from backbone_models.mobile_vit import MobileVit
 from backbone_models.vit import ViT
 from tensorflow.keras import activations
 
-class SpatioTemporalModel(tf.keras.Model):
+class SpatioMultiChannellModel(tf.keras.Model):
 
-    def __init__(self, model_type, input_shape,label_shape,pretrained):
-        super(SpatioTemporalModel, self).__init__()
+    def __init__(self, model_type, channel_type,input_shape,label_shape,pretrained):
+        super(SpatioMultiChannellModel, self).__init__()
+        #https://keras.io/examples/vision/vivit/
         #https://www.philschmid.de/image-classification-huggingface-transformers-keras
 
         temporal_input = tf.keras.layers.Input(shape=input_shape)
-        t_shape=temporal_input.shape
-        input_list = tf.split(temporal_input, num_or_size_splits=int(t_shape[-1]/3), axis=-1)
-        feature = tf.squeeze(tf.stack(input_list, axis=1),-4)
-
-
-        backbone=BackboneModel(model_type,feature.shape[2:],pretrained)
-        #backbone.build((feature.shape[0],*feature.shape[2:]))
-        #backbone.compile(run_eagerly=True)
-        #backbone.summary()
-
-
-        multi_chanel_model = tf.keras.Sequential(name='total')
-        multi_chanel_model.add(TimeDistributed(backbone, input_shape=feature.shape[1:]))
-        multi_chanel_model.add(Flatten())
-        multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.5))
-        multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(64, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.5))
-        multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.5))
-        multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
+        if channel_type==1:
+            fet_out=SpatioMultiChannellModel._multi_channel_builder_1(model_type, pretrained, label_shape, temporal_input)
+        elif channel_type == 2:
+            fet_out = SpatioMultiChannellModel._multi_channel_builder_2(model_type, pretrained, label_shape,temporal_input)
 
         #input_layer = Input(shape=(16,))
         #reg_head=tf.keras.Sequential()
@@ -53,7 +34,7 @@ class SpatioTemporalModel(tf.keras.Model):
         #Mg_model = tf.keras.Model(input_layer, reg_head(input_layer), name='Mg')
         #pH_model = tf.keras.Model(input_layer, reg_head(input_layer), name='pH')
 
-        fet_out=multi_chanel_model(feature)
+
         #P_out = P_model(fet_out)
         #K_out = K_model(fet_out)
         #Mg_out = Mg_model(fet_out)
@@ -67,7 +48,63 @@ class SpatioTemporalModel(tf.keras.Model):
         pH_out = Activation(activation=activations.linear, name='pH')(pH_logit)
 
 
-        super(SpatioTemporalModel, self).__init__(inputs=temporal_input, outputs=[fet_out,P_out,K_out,Mg_out,pH_out])
+        super(SpatioMultiChannellModel, self).__init__(inputs=temporal_input, outputs=[fet_out, P_out, K_out, Mg_out, pH_out])
+
+    @staticmethod
+    def _multi_channel_builder_1(model_type,pretrained,label_shape, temporal_input):
+        t_shape = temporal_input.shape
+        input_list = tf.split(temporal_input, num_or_size_splits=int(t_shape[-1] / 3), axis=-1)
+        feature = tf.squeeze(tf.stack(input_list, axis=1), -4)
+
+        backbone = BackboneModel(model_type, feature.shape[2:], pretrained)
+        # backbone.build((feature.shape[0],*feature.shape[2:]))
+        # backbone.compile(run_eagerly=True)
+        # backbone.summary()
+
+        multi_chanel_model = tf.keras.Sequential(name='total')
+        multi_chanel_model.add(TimeDistributed(backbone, input_shape=feature.shape[1:]))
+        multi_chanel_model.add(Flatten())
+        multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(Dropout(0.25))
+        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(Dropout(0.25))
+        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(Dropout(0.25))
+        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
+
+        out=multi_chanel_model(feature)
+        return out
+
+    @staticmethod
+    def _multi_channel_builder_2(model_type,pretrained,label_shape, temporal_input):
+        t_shape = temporal_input.shape
+        input_list = tf.split(temporal_input, num_or_size_splits=int(t_shape[-1] / 3), axis=-1)
+        out_list=[]
+        for input in input_list:
+            backbone = BackboneModel(model_type, input.shape[2:], pretrained)
+            out_list.append(backbone(tf.squeeze(input, -4)))
+
+        feature = tf.stack(out_list, axis=1)
+
+
+        multi_chanel_model = tf.keras.Sequential(name='total')
+        multi_chanel_model.add(Flatten())
+        multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(Dropout(0.25))
+        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(Dropout(0.25))
+        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(Dropout(0.25))
+        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
+
+        out=multi_chanel_model(feature)
+        return out
 
 
 class BackboneModel(tf.keras.Model):
@@ -110,13 +147,13 @@ class BackboneModel(tf.keras.Model):
                 model = ViT(input_shape=input_shape, include_top=True, classifier_activation=None)
 
             single_channel_header = tf.keras.Sequential()
-            single_channel_header.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
-            single_channel_header.add(Dropout(0.5))
+            single_channel_header.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
+            single_channel_header.add(Dropout(0.25))
             single_channel_header.add(BatchNormalization())
-            #single_channel_header.add(Dense(64, activation=tf.keras.layers.LeakyReLU()))
-            #single_channel_header.add(Dropout(0.5))
-            #single_channel_header.add(BatchNormalization())
-            single_channel_header.add(Dense(16, activation=tf.keras.layers.LeakyReLU()))
+            single_channel_header.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
+            single_channel_header.add(Dropout(0.25))
+            single_channel_header.add(BatchNormalization())
+            single_channel_header.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
             single_channel_header.add(Dropout(0.25))
             single_channel_header.add(BatchNormalization())
 

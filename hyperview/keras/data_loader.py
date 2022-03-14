@@ -38,12 +38,14 @@ class DataGenerator():
         train_files = DataGenerator._load_data(train_dir)
         train_labels = DataGenerator._load_gt(label_dir)
         train_files, valid_files, train_labels, valid_labels = train_test_split(train_files, train_labels, test_size = valid_size, random_state = 42)
+        test_files, valid_files, test_labels, valid_labels = train_test_split(valid_files, valid_labels,test_size=0.5, random_state=42)
 
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
         self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans)
         self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans)
+        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans)
         self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,eval=True)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)

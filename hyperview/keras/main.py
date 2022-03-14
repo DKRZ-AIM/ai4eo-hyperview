@@ -8,16 +8,19 @@ from math import floor,ceil
 import numpy as np
 from tqdm.auto import tqdm
 import csv
-from model_selector import SpatioTemporalModel
+from model_selector import SpatioMultiChannellModel
 import matplotlib.pyplot as plt
 import keras.backend as K
 import pandas as pd
 import tensorflow_addons as tfa
+np.random.seed(1)
+tf.random.set_seed(2)
 
 
 parser = argparse.ArgumentParser(description='HyperView')
 
 parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-c', '--channel-type', default=1, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
@@ -30,9 +33,9 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', he
 parser.add_argument('-p', '--pretrained', dest='pretrained', action='store_true', help='pretrained or not')
 parser.add_argument('--cuda', default='all', type=str, help=' cuda devices (default: 0)')
 
-parser.add_argument('--train-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo-hyperview/train_data/train_data/', type=str, help='path to the data directory')
-parser.add_argument('--label-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo-hyperview/train_data/train_gt.csv', type=str, help='path to the data directory')
-parser.add_argument('--eval-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo-hyperview/test_data/', type=str, help='path to the data directory')
+parser.add_argument('--train-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/train_data/train_data/', type=str, help='path to the data directory')
+parser.add_argument('--label-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/train_data/train_gt.csv', type=str, help='path to the data directory')
+parser.add_argument('--eval-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/test_data/', type=str, help='path to the data directory')
 
 
 parser.add_argument('--out-dir', default='modeldir/', type=str, help='Out Directory (default: modeldir)')
@@ -52,10 +55,11 @@ def main():
 
 
 
-    experiment_log = '{}/m_{}_b_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.batch_size, args.learning_rate, args.pretrained,args.width)
-    model = SpatioTemporalModel(args.model_type,dataset.image_shape,dataset.label_shape,pretrained=args.pretrained)
-    #model=train_model(model, dataset, experiment_log, warmup=True)
+    experiment_log = '{}/m_{}_c_{}_b_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type,args.channel_type, args.batch_size, args.learning_rate, args.pretrained,args.width)
+    model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
+    model=train_model(model, dataset, experiment_log, warmup=True)
     model=train_model(model, dataset, experiment_log, warmup=False)
+    model.load_weights('{}_model_best.h5'.format(experiment_log))
     evaluate_model(model, dataset)
     create_submission(model, dataset.eval_reader,experiment_log)
 
@@ -103,9 +107,9 @@ def train_model(model, dataset, log_args, warmup=True):
         callbacks = [
                 ReduceLROnPlateau(verbose=1),
                 EarlyStopping(patience=25),
-                #ModelCheckpoint(#update_weights=True,
-                #    filepath='{}_model_best.tf'.format(log_args),
-                #    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
+                ModelCheckpoint(#update_weights=True,
+                    filepath='{}_model_best.h5'.format(log_args),
+                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
                 ]
 
         history = model.fit(dataset.train_reader,
@@ -124,7 +128,7 @@ def train_model(model, dataset, log_args, warmup=True):
         print_history(history, 'K_loss', loss_log)
         loss_log = '{}_Mg_loss.jpg'.format(log_args)
         print_history(history, 'Mg_loss', loss_log)
-        loss_log = '{}_K_loss.jpg'.format(log_args)
+        loss_log = '{}_pH_loss.jpg'.format(log_args)
         print_history(history, 'pH_loss', loss_log)
 
         return model
@@ -134,12 +138,13 @@ def evaluate_model(model, generators, logging=True):
     print('\n\nEVALUATION SESSION STARTED!\n\n')
     tr_loss = challenge_eval(model,generators.train_reader)
     val_loss = challenge_eval(model,generators.valid_reader)
+    te_loss = challenge_eval(model, generators.test_reader)
     #tr_loss = model.evaluate(generators.train_reader)
     #val_loss = model.evaluate(generators.valid_reader)
     if logging:
-        header = ['out_dir','m','b','l','p','wxh', 'train_loss', 'valid_loss', 'P','P_val','K','K_val', 'Mg','Mg_val','pH', 'pH_val']
-        info = [args.out_dir, args.model_type,args.batch_size,args.learning_rate,args.pretrained,args.width,
-                tr_loss[0], val_loss[0], tr_loss[1], val_loss[1],tr_loss[2], val_loss[2], tr_loss[3], val_loss[3],tr_loss[4], val_loss[4]]
+        header = ['out_dir','m','c','b','l','p','wxh', 'train_loss', 'valid_loss', 'P','P_val','K','K_val', 'Mg','Mg_val','pH', 'pH_val','test_loss','P_test','K_test','Mg_test','pH_test']
+        info = [args.out_dir, args.model_type,args.channel_type,args.batch_size,args.learning_rate,args.pretrained,args.width,
+                tr_loss[0], val_loss[0], tr_loss[1], val_loss[1],tr_loss[2], val_loss[2], tr_loss[3], val_loss[3],tr_loss[4], val_loss[4],te_loss[0],te_loss[1],te_loss[2],te_loss[3],te_loss[4]]
         if not os.path.exists(args.out_dir+'/'+args.log_file):
             with open(args.out_dir+'/'+args.log_file, 'w') as file:
                 logger = csv.writer(file)
