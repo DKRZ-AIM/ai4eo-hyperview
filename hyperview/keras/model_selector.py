@@ -5,6 +5,10 @@ from backbone_models.swin_transformer import SwinTransformer
 from backbone_models.mobile_vit import MobileVit
 from backbone_models.vit import ViT
 from tensorflow.keras import activations
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+import os
+os.environ['KERAS_HOME'] = os.path.join(os.getcwd(), 'keras')
 
 class SpatioMultiChannellModel(tf.keras.Model):
 

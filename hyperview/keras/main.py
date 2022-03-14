@@ -33,9 +33,9 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', he
 parser.add_argument('-p', '--pretrained', dest='pretrained', action='store_true', help='pretrained or not')
 parser.add_argument('--cuda', default='all', type=str, help=' cuda devices (default: 0)')
 
-parser.add_argument('--train-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/train_data/train_data/', type=str, help='path to the data directory')
-parser.add_argument('--label-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/train_data/train_gt.csv', type=str, help='path to the data directory')
-parser.add_argument('--eval-dir', default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/test_data/', type=str, help='path to the data directory')
+parser.add_argument('--train-dir', default='train_data/train_data/', type=str, help='path to the data directory')
+parser.add_argument('--label-dir', default='train_data/train_gt.csv', type=str, help='path to the data directory')
+parser.add_argument('--eval-dir', default='test_data/', type=str, help='path to the data directory')
 
 
 parser.add_argument('--out-dir', default='modeldir/', type=str, help='Out Directory (default: modeldir)')
@@ -109,7 +109,7 @@ def train_model(model, dataset, log_args, warmup=True):
                 EarlyStopping(patience=25),
                 ModelCheckpoint(#update_weights=True,
                     filepath='{}_model_best.h5'.format(log_args),
-                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
+                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True),
                 ]
 
         history = model.fit(dataset.train_reader,
