@@ -175,7 +175,7 @@ class BackboneModel(tf.keras.Model):
             single_out = single_channel_header(model(inp))
             #backbone_with_head = tf.keras.Model(single_in, single_out)
 
-            super(BackboneModel, self).__init__(inputs=inp, outputs=single_out,name='backbone_model')
+            super(BackboneModel, self).__init__(inputs=inp, outputs=single_out)
 
 
         def compute_output_shape(self, input_shape):
