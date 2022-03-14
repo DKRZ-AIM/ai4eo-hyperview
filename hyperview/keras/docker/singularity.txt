@@ -1,0 +1,9 @@
+
+docker build -t ridvansalih/hyperview:latest .
+docker login -u ridvansalih -p Marduk1987*
+docker push ridvansalih/hyperview:latest
+docker pull ridvansalih/hyperview:latest
+
+export SINGULARITY_CACHEDIR=$(mktemp -d -p ${PWD})
+export SINGULARITY_TMPDIR=$(mktemp -d -p ${PWD})
+singularity pull hyperview.sif docker://ridvansalih/hyperview:latest

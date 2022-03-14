@@ -49,7 +49,7 @@ def main():
         os.makedirs(args.out_dir)
     image_shape = (args.width, args.width)
     dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
-                            valid_size=0.20,
+                            valid_size=0.24,
                             image_shape=image_shape,
                             batch_size=args.batch_size)
 
@@ -139,6 +139,8 @@ def evaluate_model(model, generators, logging=True):
     tr_loss = challenge_eval(model,generators.train_reader)
     val_loss = challenge_eval(model,generators.valid_reader)
     te_loss = challenge_eval(model, generators.test_reader)
+
+    print('TOTAL LOSS:  Training: {}, Validation: {}, Test: {}'.format(tr_loss[0],val_loss[0],te_loss[0]))
     #tr_loss = model.evaluate(generators.train_reader)
     #val_loss = model.evaluate(generators.valid_reader)
     if logging:
