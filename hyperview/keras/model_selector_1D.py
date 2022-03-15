@@ -185,17 +185,17 @@ class Dense_Block(tf.keras.Model):
         self.layer_0 = Dense_Block._layer_generator(growth_rate, is_encoder)
         self.layer_1 = Dense_Block._layer_generator(growth_rate, is_encoder)
         self.layer_2 = Dense_Block._layer_generator(growth_rate, is_encoder)
-        self.layer_3 = Dense_Block._layer_generator(growth_rate, is_encoder)
-        self.layer_4 = Dense_Block._layer_generator(growth_rate, is_encoder)
+        #self.layer_3 = Dense_Block._layer_generator(growth_rate, is_encoder)
+        #self.layer_4 = Dense_Block._layer_generator(growth_rate, is_encoder)
 
 
     def call(self,x):
         out_0 = self.layer_0(x)
         out_1 = self.layer_1(out_0)
         out_2 = self.layer_2(tf.concat([out_0, out_1], -1))
-        out_3 = self.layer_3(tf.concat([out_0, out_1, out_2], -1))
-        out_4 = self.layer_4(tf.concat([out_0, out_1, out_2, out_3], -1))
-        out = tf.concat([out_0, out_1, out_2, out_3, out_4], -1)
+        #out_3 = self.layer_3(tf.concat([out_0, out_1, out_2], -1))
+        #out_4 = self.layer_4(tf.concat([out_0, out_1, out_2, out_3], -1))
+        out = tf.concat([out_0, out_1, out_2], -1)
         return out
 
     @staticmethod

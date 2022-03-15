@@ -114,6 +114,9 @@ class DataGenerator():
                 mask = npz['mask']
                 data = np.ma.MaskedArray(data,mask)
 
+                #me = np.mean(data,axis=(1,2))
+                #var = np.var(data, axis=(1, 2))
+
                 #data = data / stats[-1]
                 data = data.flatten('F')
                 data = data[~data.mask]

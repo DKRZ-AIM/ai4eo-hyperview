@@ -179,10 +179,12 @@ def create_submission(model, reader,log_args):
             predictions=np.concatenate((predictions,y_pred),axis=0)
             files=np.concatenate((files,file_name.numpy()))
 
+    predictions = predictions * np.array([325.0, 625.0, 400.0, 7.8])
+
     sample_index = np.expand_dims(np.array([int(os.path.basename(f.decode('utf-8')).replace(".npz", "")) for f in files]),1)
     predictions = np.concatenate((sample_index, predictions), axis=1)
 
-    predictions = predictions * np.array([325.0, 625.0, 400.0, 7.8])
+
     submission = pd.DataFrame(data=predictions, columns=['temp_index',"P", "K", "Mg", "pH"])
     submission=submission.sort_values(by='temp_index',ascending=True)
     submission=submission.drop(columns='temp_index')
