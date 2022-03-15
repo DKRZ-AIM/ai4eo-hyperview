@@ -103,7 +103,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
         output_number = label_shape
 
         #multi_chanel_model=DenseNet(length, num_channel, model_width, problem_type=problem_type, output_nums=output_number).DenseNet169()
-        multi_chanel_model = Encoder(temporal_input)
+        multi_chanel_model = Encoder(temporal_input,name='total')
 
         out = multi_chanel_model(temporal_input)
         multi_chanel_model.summary()
@@ -112,7 +112,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
 class Encoder(tf.keras.Model):
     ''' This the encoder part of VAE
     '''
-    def __init__(self, temporal_input, hidden_dim=128, latent_dim=4):
+    def __init__(self, temporal_input, hidden_dim=128, latent_dim=4,name):
         '''
         Args:
             input_dim: A integer indicating the size of input (in case of MNIST 28 * 28).
@@ -165,7 +165,7 @@ class Encoder(tf.keras.Model):
         encoded_latent = encoder_latent(encoded_hidden)
         encoded_latent = tf.keras.activations.sigmoid(encoded_latent)
 
-        super(Encoder, self).__init__(inputs=temporal_input, outputs=encoded_latent)
+        super(Encoder, self).__init__(inputs=temporal_input, outputs=encoded_latent,name=name)
 
 
 
