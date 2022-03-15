@@ -107,11 +107,13 @@ class DataGenerator():
     def _deparse_single_image(filename,label,stats=None):
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
+
                 PAD_CONST_1 = 6715800
                 PAD_CONST_2 = int(1228800)
                 data=npz['data']/np.max(stats[-1])
                 mask = npz['mask']
                 data = np.ma.MaskedArray(data,mask)
+
                 #data = data / stats[-1]
                 data = data.flatten('F')
                 data = data[~data.mask]
