@@ -162,6 +162,7 @@ class BackboneModel(tf.keras.Model):
                 model = ViT(input_shape=input_shape, include_top=False, classifier_activation=None)
 
             single_channel_header = tf.keras.Sequential()
+            #single_channel_header.add(GlobalAvgPool2D())
             single_channel_header.add(Flatten())
             single_channel_header.add(Dense(4, activation='sigmoid'))
             #single_channel_header.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
@@ -182,5 +183,6 @@ class BackboneModel(tf.keras.Model):
 
         def compute_output_shape(self, input_shape):
             inp=tf.keras.layers.Input(shape=input_shape[1:])
-            out=self.call(inp)
+            out=tf.keras.layers.Input(shape=4)
+            #out=self.call(inp)
             return out.shape[:]
