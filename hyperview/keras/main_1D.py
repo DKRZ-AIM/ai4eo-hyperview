@@ -1,4 +1,4 @@
-from data_loader_2D import DataGenerator
+from data_loader_1D import DataGenerator
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras.optimizers import Nadam, Adam
@@ -8,7 +8,7 @@ from math import floor,ceil
 import numpy as np
 from tqdm.auto import tqdm
 import csv
-from model_selector_2D import SpatioMultiChannellModel
+from model_selector_1D import SpatioMultiChannellModel
 import matplotlib.pyplot as plt
 import keras.backend as K
 import pandas as pd
@@ -20,11 +20,11 @@ tf.random.set_seed(2)
 parser = argparse.ArgumentParser(description='HyperView')
 
 parser.add_argument('-m', '--model-type', default=8, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
-parser.add_argument('-c', '--channel-type', default=1, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-c', '--channel-type', default=2, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=8, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=32, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-w','--width', default=64, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
@@ -60,7 +60,7 @@ def main():
     model=train_model(model, dataset, experiment_log, warmup=True)
     model=train_model(model, dataset, experiment_log, warmup=False)
     model.load_weights('{}_model_best.tf'.format(experiment_log))
-    evaluate_model(model, dataset)
+    #evaluate_model(model, dataset)
     create_submission(model, dataset.eval_reader,experiment_log)
 
 
@@ -109,7 +109,7 @@ def train_model(model, dataset, log_args, warmup=True):
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
         lossWeights = {"total": 0, "P": 0.25 , "K": 0.25 , "Mg": 0.25 , "pH": 0.25 }
-        model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
+        model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=True)
 
         callbacks = [
                 ReduceLROnPlateau(verbose=1),

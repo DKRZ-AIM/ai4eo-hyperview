@@ -32,7 +32,6 @@ class DataGenerator():
 
         self.train_stats = np.load(train_stats_log)
         self.eval_stats = np.load(eval_stats_log)
-        tr_trans, val_trans, eval_trans = DataGenerator._init_transform(image_shape, self.train_stats,self.eval_stats)
 
         train_files = DataGenerator._load_data(train_dir)
         train_labels = DataGenerator._load_gt(label_dir)
@@ -42,10 +41,10 @@ class DataGenerator():
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
-        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,stats=self.train_stats)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,stats=self.train_stats)
-        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans,stats=self.eval_stats)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,eval=True,stats=self.eval_stats)
+        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,True,stats=self.train_stats)
+        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, True,stats=self.train_stats)
+        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, False,stats=self.eval_stats)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, False,eval=True,stats=self.eval_stats)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -53,7 +52,7 @@ class DataGenerator():
     @staticmethod
     def _get_dataset_features(reader):
         for feature, mask, in reader.take(1):
-            image_shape=tuple([1, feature.shape[-3],feature.shape[-2],feature.shape[-1]])
+            image_shape=tuple([feature.shape[-2],feature.shape[-1]])
             label_shape=mask.shape[-1]
             return image_shape,label_shape,
 
@@ -61,10 +60,10 @@ class DataGenerator():
     def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,stats),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
         if not eval:
             dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
-        dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval,stats=stats),num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval),num_parallel_calls=tf.data.AUTOTUNE)
         dataset = dataset.batch(batch_size, drop_remainder=False,num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
 
         #if batch_size<2:
@@ -105,30 +104,40 @@ class DataGenerator():
                       'constant', constant_values=0)
 
     @staticmethod
-    def _deparse_single_image(filename,label):
+    def _deparse_single_image(filename,label,stats=None):
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
-                arr = np.ma.MaskedArray(**npz)
-                image = npz['data']
-                mask = 2*(1 - npz['mask'].astype(int))-1
-                image = (image * mask)
-
-                max_edge = np.max(image.shape[1:])
-                image = DataGenerator._shape_pad(image, (max_edge,max_edge) )
-                image = image.transpose((1, 2, 0))
-
-                return image
+                PAD_CONST_1 = 6715800
+                PAD_CONST_2 = int(1228800)
+                data=npz['data']/np.max(stats[-1])
+                mask = npz['mask']
+                data = np.ma.MaskedArray(data,mask)
+                #data = data / stats[-1]
+                data = data.flatten('F')
+                data = data[~data.mask]
+                if len(data)<PAD_CONST_2:
+                    shift = np.random.randint(10) * 150
+                    data = np.pad(data, ((shift, PAD_CONST_2 - len(data)-shift)), 'wrap')
+                else:
+                    le=np.floor(len(data)/150)
+                    shift = np.random.randint(le) * 150
+                    if shift + PAD_CONST_2<len(data):
+                        data=data[shift:shift+PAD_CONST_2]
+                    else:
+                        data = data[:PAD_CONST_2]
+                #pde = pde.T
+                return data
         [image ] = tf.py_function(_read_npz, [filename], [tf.float32])
 
         return tf.data.Dataset.from_tensors((image, label,filename))
 
     @staticmethod
-    def _trans_single_image(feature,label,filename,transform=None,eval=True,stats=None):
-        def _aug_fn(image):
+    def _trans_single_image(feature,label,filename,transform=None,eval=True):
+        def _aug_fn(feature):
 
-            augmented = transform(image=image)
-            feature = augmented['image']
-            feature=feature/stats[-1] #MAX
+            sample = np.random.uniform(low=-0.01, high=0.01, size=feature.shape)
+            feature=feature + sample
+
             #feature=feature.transpose((2, 0, 1))
             #feature = np.nan_to_num(feature, nan=np.finfo(float).eps, posinf=np.finfo(float).eps, neginf=-np.finfo(float).eps)
             feature = tf.cast(feature, tf.float32)
