@@ -74,8 +74,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
         #multi_chanel_model.add(BatchNormalization())
         #multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
         #multi_chanel_model.add(Dropout(0.25))
-        #multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(label_shape, activation='sigmoid'))
 
         out=multi_chanel_model(feature)
         return out
@@ -103,7 +103,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
         #multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
         #multi_chanel_model.add(Dropout(0.25))
         #multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
+        multi_chanel_model.add(Dense(label_shape, activation='sigmoid'))
 
         out=multi_chanel_model(feature)
         return out
@@ -163,7 +163,7 @@ class BackboneModel(tf.keras.Model):
 
             single_channel_header = tf.keras.Sequential()
             single_channel_header.add(Flatten())
-            single_channel_header.add(Dense(4, activation=tf.keras.layers.LeakyReLU()))
+            single_channel_header.add(Dense(4, activation='sigmoid'))
             #single_channel_header.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
             #single_channel_header.add(Dropout(0.25))
             #single_channel_header.add(BatchNormalization())

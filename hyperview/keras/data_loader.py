@@ -83,7 +83,7 @@ class DataGenerator():
             [type]: 2D numpy array with soil properties levels
         """
         gt_file = pd.read_csv(file_path)
-        labels = gt_file[["P", "K", "Mg", "pH"]].values
+        labels = gt_file[["P", "K", "Mg", "pH"]].values / np.array([325,625,400,7.8])
         return labels
 
     @staticmethod
@@ -109,7 +109,7 @@ class DataGenerator():
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
                 image = npz['data']
-                mask = 1 - npz['mask'].astype(int)
+                mask = 2*(1 - npz['mask'].astype(int))-1
                 image = (image * mask)
 
                 max_edge = np.max(image.shape[1:])

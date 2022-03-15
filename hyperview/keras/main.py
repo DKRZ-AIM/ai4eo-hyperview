@@ -69,10 +69,10 @@ def train_model(model, dataset, log_args, warmup=True):
     #with strategy.scope():
         if warmup:
             print('\n\nWARM-UP SESSION STARTED!\n\n')
-            for idx in range(len(model.submodules)):
-                if 'backbone_model' in model.submodules[idx].name:
-                    model.submodules[idx].trainable=False
-                    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = False
+            #for idx in range(len(model.submodules)):
+                #if 'backbone_model' in model.submodules[idx].name:
+                #    model.submodules[idx].trainable=False
+                #    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = False
 
             learning_rate = args.learning_rate / 10
             num_epochs = ceil(args.num_epochs / 15)
@@ -182,6 +182,7 @@ def create_submission(model, reader,log_args):
     sample_index = np.expand_dims(np.array([int(os.path.basename(f.decode('utf-8')).replace(".npz", "")) for f in files]),1)
     predictions = np.concatenate((sample_index, predictions), axis=1)
 
+    predictions = predictions * np.array([325.0, 625.0, 400.0, 7.8])
     submission = pd.DataFrame(data=predictions, columns=['temp_index',"P", "K", "Mg", "pH"])
     submission=submission.sort_values(by='temp_index',ascending=True)
     submission=submission.drop(columns='temp_index')
@@ -190,7 +191,7 @@ def create_submission(model, reader,log_args):
 def challenge_eval(model, reader):
     predictions = []
     ground_truth = []
-    y_base=np.array([121764.2,394876.1, 275875.1,11747.67])/1731
+    y_base = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
     for X, Y  in reader:
 
         y_pred = model.predict(X)
@@ -226,7 +227,8 @@ def print_history(history, type, file_name):
     fig.savefig(file_name, dpi=fig.dpi)
 
 
-def custom_mse(y_base_fact = np.array([121764.2/1731.0,394876.1/1731.0, 275875.1/1731.0,11747.67/1731.0]), idx=None):
+def custom_mse(idx=None):
+    y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
     @tf.function
     def mse_1(y_true,y_pred):
         y_base = tf.constant(y_base_fact, dtype=tf.float32)
