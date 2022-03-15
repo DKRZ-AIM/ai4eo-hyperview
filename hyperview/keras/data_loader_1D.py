@@ -12,7 +12,7 @@ from sklearn import preprocessing
 
 
 class DataGenerator():
-    def __init__(self,train_dir, label_dir, eval_dir,valid_size=0.2,image_shape=(128,128), batch_size=16):
+    def __init__(self,train_dir, label_dir, eval_dir,valid_size=0.2,agg=True, batch_size=16):
         """Constructor.
                 """
         self.train_dir=train_dir
@@ -41,10 +41,10 @@ class DataGenerator():
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
-        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,True,stats=self.train_stats)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, True,stats=self.train_stats)
-        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, False,stats=self.eval_stats)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, False,eval=True,stats=self.eval_stats)
+        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,True,agg=agg,stats=self.train_stats)
+        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, True,agg=agg,stats=self.train_stats)
+        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, False,agg=agg,stats=self.eval_stats)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, False,agg=agg,eval=True,stats=self.eval_stats)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -57,10 +57,10 @@ class DataGenerator():
             return image_shape,label_shape,
 
     @staticmethod
-    def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None):
+    def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None,agg=True):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,stats),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,stats,agg),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
         if not eval:
             dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval),num_parallel_calls=tf.data.AUTOTUNE)
@@ -104,7 +104,8 @@ class DataGenerator():
                       'constant', constant_values=0)
 
     @staticmethod
-    def _deparse_single_image(filename,label,stats=None):
+    def _deparse_single_image(filename,label,stats=None,agg=True):
+        #filtering = SpectralCurveFiltering()
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
 
@@ -114,24 +115,37 @@ class DataGenerator():
                 mask = npz['mask']
                 data = np.ma.MaskedArray(data,mask)
 
-                #me = np.mean(data,axis=(1,2))
-                #var = np.var(data, axis=(1, 2))
+                #arr=filtering(data)
+                if agg:
+                    arr = np.ma.mean(data,axis=(1,2))
+                    var = np.ma.var(data,(1,2))
 
-                #data = data / stats[-1]
-                data = data.flatten('F')
-                data = data[~data.mask]
-                if len(data)<PAD_CONST_2:
-                    shift = np.random.randint(10) * 150
-                    data = np.pad(data, ((shift, PAD_CONST_2 - len(data)-shift)), 'wrap')
+                    dXdl = np.gradient(arr, axis=0)
+                    d2Xdl2 = np.gradient(dXdl, axis=0)
+                    q1 = np.percentile(data, 25, axis=(1, 2))
+                    q2 = np.percentile(data, 50, axis=(1, 2))
+                    q3 = np.percentile(data, 75, axis=(1, 2))
+                    fft = np.fft.fft(arr)
+                    real=np.real(fft)
+                    imag=np.imag(fft)
+
+                    return np.concatenate([arr,var,q1,q2,q3,dXdl,d2Xdl2,real,imag],-1)
                 else:
-                    le=np.floor(len(data)/150)
-                    shift = np.random.randint(le) * 150
-                    if shift + PAD_CONST_2<len(data):
-                        data=data[shift:shift+PAD_CONST_2]
+                    #data = data / stats[-1]
+                    data = data.flatten('F')
+                    data = data[~data.mask]
+                    if len(data)<PAD_CONST_2:
+                        shift = np.random.randint(10) * 150
+                        data = np.pad(data, ((shift, PAD_CONST_2 - len(data)-shift)), 'wrap')
                     else:
-                        data = data[:PAD_CONST_2]
-                #pde = pde.T
-                return data
+                        le=np.floor(len(data)/150)
+                        shift = np.random.randint(le) * 150
+                        if shift + PAD_CONST_2<len(data):
+                            data=data[shift:shift+PAD_CONST_2]
+                        else:
+                            data = data[:PAD_CONST_2]
+                    #pde = pde.T
+                    return data
         [image ] = tf.py_function(_read_npz, [filename], [tf.float32])
 
         return tf.data.Dataset.from_tensors((image, label,filename))
@@ -140,8 +154,9 @@ class DataGenerator():
     def _trans_single_image(feature,label,filename,transform=None,eval=True):
         def _aug_fn(feature):
 
-            sample = np.random.uniform(low=-0.01, high=0.01, size=feature.shape)
-            feature=feature + sample
+            if not eval:
+                sample = np.random.uniform(low=-0.01, high=0.01, size=feature.shape)
+                feature=feature + sample
 
             #feature=feature.transpose((2, 0, 1))
             #feature = np.nan_to_num(feature, nan=np.finfo(float).eps, posinf=np.finfo(float).eps, neginf=-np.finfo(float).eps)
@@ -229,6 +244,19 @@ class DataGenerator():
             ])
 
         return train_transform, valid_transform, eval_transform
+
+class SpectralCurveFiltering():
+    """
+    Create a histogram (a spectral curve) of a 3D cube, using the merge_function
+    to aggregate all pixels within one band. The return array will have
+    the shape of [CHANNELS_COUNT]
+    """
+
+    def __init__(self, merge_function = np.mean):
+        self.merge_function = merge_function
+
+    def __call__(self, sample: np.ndarray):
+        return self.merge_function(sample, axis=(1, 2))
 
 
 
