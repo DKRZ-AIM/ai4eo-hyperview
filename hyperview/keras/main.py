@@ -22,9 +22,9 @@ parser = argparse.ArgumentParser(description='HyperView')
 parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('-c', '--channel-type', default=1, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
-parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
+parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=8, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-w','--width', default=64, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
@@ -190,7 +190,9 @@ def create_submission(model, reader,log_args):
 def challenge_eval(model, reader):
     predictions = []
     ground_truth = []
+    y_base=np.array([121764.2,394876.1, 275875.1,11747.67])/1731
     for X, Y  in reader:
+
         y_pred = model.predict(X)
         y_pred = y_pred[0]
         #y_pred = np.concatenate(y_pred,axis=1)
@@ -203,7 +205,8 @@ def challenge_eval(model, reader):
 
 
     mse = np.mean((ground_truth - predictions) ** 2, axis=0)
-    scores = mse / np.array([1100.0, 2500.0, 2000.0, 3.0])
+    mse_b = np.mean((ground_truth-y_base) ** 2, axis=0)
+    scores = mse / mse_b #np.array([1100.0, 2500.0, 2000.0, 3.0])
     # Calculate the final score
     final_score = np.mean(scores)
 
@@ -223,17 +226,17 @@ def print_history(history, type, file_name):
     fig.savefig(file_name, dpi=fig.dpi)
 
 
-def custom_mse(div_factor=np.array([1100.0, 2500.0, 2000.0, 3.0]), idx=None):
+def custom_mse(y_base_fact = np.array([121764.2/1731.0,394876.1/1731.0, 275875.1/1731.0,11747.67/1731.0]), idx=None):
     @tf.function
     def mse_1(y_true,y_pred):
-        divider = tf.constant(div_factor, dtype=tf.float32)
+        y_base = tf.constant(y_base_fact, dtype=tf.float32)
         if idx is not None:
             y_true=y_true[:,idx]
-            divider = divider[idx]
+            y_base = y_base[idx]
 
-        loss = K.square(y_pred - y_true)
-        loss = tf.math.divide(loss , divider)
-        loss = K.mean(loss)
+        loss_raw = K.mean(K.square(y_true - y_pred), 0)
+        loss_base = K.mean(K.square(y_true - y_base), 0)
+        loss=tf.math.divide(loss_raw, loss_base)
         return loss
     return mse_1
 

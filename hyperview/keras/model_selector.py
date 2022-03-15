@@ -66,15 +66,15 @@ class SpatioMultiChannellModel(tf.keras.Model):
         multi_chanel_model = tf.keras.Sequential(name='total')
         multi_chanel_model.add(TimeDistributed(backbone, input_shape=feature.shape[1:]))
         multi_chanel_model.add(Flatten())
-        multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.25))
-        multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.25))
-        multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.25))
-        multi_chanel_model.add(BatchNormalization())
+        #multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
+        #multi_chanel_model.add(Dropout(0.25))
+        #multi_chanel_model.add(BatchNormalization())
+        #multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
+        #multi_chanel_model.add(Dropout(0.25))
+        #multi_chanel_model.add(BatchNormalization())
+        #multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
+        #multi_chanel_model.add(Dropout(0.25))
+        #multi_chanel_model.add(BatchNormalization())
         multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
 
         out=multi_chanel_model(feature)
@@ -93,16 +93,16 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
 
         multi_chanel_model = tf.keras.Sequential(name='total')
-        multi_chanel_model.add(Flatten(name='freeze_points'))
-        multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.25))
-        multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.25))
-        multi_chanel_model.add(BatchNormalization())
-        multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
-        multi_chanel_model.add(Dropout(0.25))
-        multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Flatten())
+        #multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
+        #multi_chanel_model.add(Dropout(0.25))
+        #multi_chanel_model.add(BatchNormalization())
+        #multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
+        #multi_chanel_model.add(Dropout(0.25))
+        #multi_chanel_model.add(BatchNormalization())
+        #multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
+        #multi_chanel_model.add(Dropout(0.25))
+        #multi_chanel_model.add(BatchNormalization())
         multi_chanel_model.add(Dense(label_shape, activation=tf.keras.layers.LeakyReLU()))
 
         out=multi_chanel_model(feature)
@@ -116,61 +116,63 @@ class BackboneModel(tf.keras.Model):
             model=None
             weights = 'imagenet' if pretrained else None
             if model_type == 0:
-                model=SwinTransformer('swin_tiny_224', num_classes=1000, include_top=True, pretrained=pretrained)
+                model=SwinTransformer('swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
 
             if model_type == 1:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_small_224_1.0_float.h5')
-                model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
 
             if model_type == 2:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_large_224_1.0_float.h5')
-                model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 3:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/efficientnetv2-s.h5')
-                model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 4:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/evgg19_weights_tf_dim_ordering_tf_kernels.h5')
-                model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 5:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/xception_weights_tf_dim_ordering_tf_kernels.h5')
-                model=tf.keras.applications.Xception(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.Xception(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 6:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/resnet50v2_weights_tf_dim_ordering_tf_kernels.h5')
-                model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=True,
+                model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 7:
-                model=MobileVit(input_shape=input_shape, include_top=True,classifier_activation=None)
+                model=MobileVit(input_shape=input_shape, include_top=False,classifier_activation=None)
 
             if model_type == 8:
-                model = ViT(input_shape=input_shape, include_top=True, classifier_activation=None)
+                model = ViT(input_shape=input_shape, include_top=False, classifier_activation=None)
 
             single_channel_header = tf.keras.Sequential()
-            single_channel_header.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
-            single_channel_header.add(Dropout(0.25))
-            single_channel_header.add(BatchNormalization())
-            single_channel_header.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
-            single_channel_header.add(Dropout(0.25))
-            single_channel_header.add(BatchNormalization())
-            single_channel_header.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
-            single_channel_header.add(Dropout(0.25))
-            single_channel_header.add(BatchNormalization())
+            single_channel_header.add(Flatten())
+            single_channel_header.add(Dense(4, activation=tf.keras.layers.LeakyReLU()))
+            #single_channel_header.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
+            #single_channel_header.add(Dropout(0.25))
+            #single_channel_header.add(BatchNormalization())
+            #single_channel_header.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
+            #single_channel_header.add(Dropout(0.25))
+            #single_channel_header.add(BatchNormalization())
+            #single_channel_header.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
+            #single_channel_header.add(Dropout(0.25))
+            #single_channel_header.add(BatchNormalization())
 
             single_out = single_channel_header(model(inp))
             #backbone_with_head = tf.keras.Model(single_in, single_out)
