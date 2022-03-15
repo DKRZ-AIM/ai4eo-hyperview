@@ -112,7 +112,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
 class Encoder(tf.keras.Model):
     ''' This the encoder part of VAE
     '''
-    def __init__(self, temporal_input, hidden_dim=128, latent_dim=4,name='total'):
+    def __init__(self, temporal_input, hidden_dim=32, latent_dim=4,name='total'):
         '''
         Args:
             input_dim: A integer indicating the size of input (in case of MNIST 28 * 28).
@@ -121,34 +121,35 @@ class Encoder(tf.keras.Model):
         '''
         #super().__init__()
 
-        conv=tf.keras.layers.Conv1D(16, kernel_size=3,padding='same')
+        conv=tf.keras.layers.Conv1D(16, kernel_size=7,strides=2,padding='same',activation='swish')
+        #pool_1 = tf.keras.layers.MaxPooling1D(pool_size=3, strides=2)
         layer = [conv]
         in_layer=tf.keras.Sequential(layer)
 
         denseblock1 = _make_dense_block(Dense_Block, True, 16)
-        conv=tf.keras.layers.Conv1D(32, 3,strides=2, padding='same')
-        layer = [tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU(),conv]
+        conv=tf.keras.layers.Conv1D(16, 5,strides=2, padding='same',activation='swish')
+        layer = [conv,tf.keras.layers.BatchNormalization(), tf.keras.layers.Dropout(0.25)]
         layer1 = tf.keras.Sequential(layer)
 
         denseblock2 = _make_dense_block(Dense_Block, True, 32)
-        conv = tf.keras.layers.Conv1D(64, 3, strides=1, padding='same')
-        layer = [tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU(), conv]
+        conv = tf.keras.layers.Conv1D(32, 5, strides=2, padding='same',activation='swish')
+        layer = [conv,tf.keras.layers.BatchNormalization(),tf.keras.layers.AveragePooling1D(pool_size=3), tf.keras.layers.Dropout(0.25)]
         layer2 = tf.keras.Sequential(layer)
 
         denseblock3 = _make_dense_block(Dense_Block, True, 64)
-        conv = tf.keras.layers.Conv1D(128, 3, strides=2, padding='same')
-        layer = [tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU(), conv]
+        conv = tf.keras.layers.Conv1D(64, 5, strides=2, padding='same',activation='swish')
+        layer = [conv,tf.keras.layers.BatchNormalization(),tf.keras.layers.AveragePooling1D(pool_size=3), tf.keras.layers.Dropout(0.25)]
         layer3 = tf.keras.Sequential(layer)
 
         denseblock4 = _make_dense_block(Dense_Block, True, 32)
-        conv = tf.keras.layers.Conv1D(256, 3, strides=2, padding='same')
-        layer = [tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU(), conv]
+        conv = tf.keras.layers.Conv1D(32, 5, strides=2, padding='same',activation='swish')
+        layer = [conv,tf.keras.layers.BatchNormalization(),tf.keras.layers.AveragePooling1D(pool_size=3), tf.keras.layers.Flatten(), tf.keras.layers.Dropout(0.25)]
         layer4 = tf.keras.Sequential(layer)
 
 
-        encoder_hidden = tf.keras.Sequential([tf.keras.layers.Dense(hidden_dim),tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU()])
+        encoder_hidden = tf.keras.Sequential([tf.keras.layers.Dense(hidden_dim,activation='swish'),tf.keras.layers.BatchNormalization(), tf.keras.layers.Dropout(0.25)])
 
-        encoder_latent = tf.keras.Sequential([tf.keras.layers.Dense(latent_dim), tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU()])
+        encoder_latent = tf.keras.Sequential([tf.keras.layers.Dense(latent_dim,activation='sigmoid'), tf.keras.layers.BatchNormalization()])
 
         out = in_layer(temporal_input)
         out = denseblock1(out)
@@ -159,11 +160,10 @@ class Encoder(tf.keras.Model):
         out = layer3(out)
         out = denseblock4(out)
         out = layer4(out)
-        out=tf.keras.layers.GlobalAveragePooling1D()(out)
+        #out=tf.keras.layers.GlobalAveragePooling1D()(out)
         #out = out.view(-1, self.input_dim * 2)
         encoded_hidden = encoder_hidden(out)
         encoded_latent = encoder_latent(encoded_hidden)
-        encoded_latent = tf.keras.activations.sigmoid(encoded_latent)
 
         super(Encoder, self).__init__(inputs=temporal_input, outputs=encoded_latent,name=name)
 
@@ -194,8 +194,7 @@ class Dense_Block(tf.keras.Model):
     @staticmethod
     def _layer_generator(out_channels, is_encoder):
         if is_encoder:
-            layer = [tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU(),
-                     tf.keras.layers.Conv1D(out_channels,3,padding='same'),]
+            layer = [tf.keras.layers.Conv1D(out_channels,3,padding='same', activation='swish'), tf.keras.layers.BatchNormalization(), tf.keras.layers.Dropout(0.25)]
         else:
             layer = [tf.keras.layers.BatchNormalization(), tf.keras.layers.ReLU(),
                      tf.keras.layers.Conv1D(out_channels,3,padding='same'),
