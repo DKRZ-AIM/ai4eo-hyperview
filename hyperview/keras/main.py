@@ -1,4 +1,4 @@
-from data_loader import DataGenerator
+from data_loader_2D import DataGenerator
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras.optimizers import Nadam, Adam
@@ -19,7 +19,7 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=8, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('-c', '--channel-type', default=1, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
@@ -59,7 +59,7 @@ def main():
     model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
     model=train_model(model, dataset, experiment_log, warmup=True)
     model=train_model(model, dataset, experiment_log, warmup=False)
-    model.load_weights('{}_model_best.h5'.format(experiment_log))
+    model.load_weights('{}_model_best.tf'.format(experiment_log))
     evaluate_model(model, dataset)
     create_submission(model, dataset.eval_reader,experiment_log)
 
@@ -115,8 +115,8 @@ def train_model(model, dataset, log_args, warmup=True):
                 ReduceLROnPlateau(verbose=1),
                 EarlyStopping(patience=25),
                 ModelCheckpoint(#update_weights=True,
-                    filepath='{}_model_best.h5'.format(log_args),
-                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True),
+                    filepath='{}_model_best.tf'.format(log_args),
+                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
                 ]
 
         history = model.fit(dataset.train_reader,
