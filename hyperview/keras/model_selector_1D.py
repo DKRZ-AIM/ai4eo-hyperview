@@ -112,7 +112,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
 class Encoder(tf.keras.Model):
     ''' This the encoder part of VAE
     '''
-    def __init__(self, temporal_input, hidden_dim=128, latent_dim=4,name):
+    def __init__(self, temporal_input, hidden_dim=128, latent_dim=4,name='total'):
         '''
         Args:
             input_dim: A integer indicating the size of input (in case of MNIST 28 * 28).
