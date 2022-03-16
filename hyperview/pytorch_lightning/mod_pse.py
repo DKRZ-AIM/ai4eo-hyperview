@@ -42,7 +42,6 @@ class PixelSetEncoder(nn.Module):
 
         inter_dim = self.mlp1_dim[-1] * len(pooling.split('_'))
 
-
         if self.with_extra:
             self.name += 'Extra'
             inter_dim += self.extra_size
@@ -64,42 +63,40 @@ class PixelSetEncoder(nn.Module):
                 layers.append(nn.ReLU())
         self.mlp2 = nn.Sequential(*layers)
 
-    def forward(self, input):
+    def forward(self, x):
         """
         The input of the PSE is a tuple of tensors as yielded by the PixelSetData class:
-          (Pixel-Set, Pixel-Mask) or ((Pixel-Set, Pixel-Mask), Extra-features)
+          (Pixel-Set) or (Pixel-Set, Extra-features)
         Pixel-Set : Batch_size x (Sequence length) x Channel x Number of pixels
-        Pixel-Mask : Batch_size x (Sequence length) x Number of pixels
         Extra-features : Batch_size x (Sequence length) x Number of features
+
+        Note: Channel = 1
+        Sequence length is along wavelength axis, not time axis!
+        Sequence length = 150
 
         If the input tensors have a temporal dimension, it will be combined with the batch dimension so that the
         complete sequences are processed at once. Then the temporal dimension is separated back to produce a tensor of
         shape Batch_size x Sequence length x Embedding dimension
         """
-        a, b = input
         
-        if len(a) == 2: # extra features included
-            out, mask = a
-            extra = b
-            if len(extra) == 2:
-                extra, bm = extra
+        if len(x) == 2: # extra features included
+            out, extra = x
             extra = extra.unsqueeze(1).repeat(1, out.size(1) ,1).float()
         else:
-            out, mask = a, b
-        mask = mask.unsqueeze(1).repeat(1, out.size(1) ,1)
+            out = x
+
         if len(out.shape) == 4:
             # Combine batch and temporal dimensions in case of sequential input
             reshape_needed = True
             batch, temp = out.shape[:2]
 
             out = out.view(batch * temp, *out.shape[2:])
-            mask = mask.view(batch * temp, -1)
             if self.with_extra:
                 extra = extra.view(batch * temp, -1)
         else:
             reshape_needed = False
         out = self.mlp1(out)
-        out = torch.cat([pooling_methods[n](out, mask) for n in self.pooling.split('_')], dim=1)
+        out = torch.cat([pooling_methods[n](out) for n in self.pooling.split('_')], dim=1)
 
         if self.with_extra:
             out = torch.cat([out, extra], dim=1)
@@ -150,6 +147,24 @@ def masked_std(x, mask):
     out = out.permute(1, 0)
     return out
 
+def mean(x):
+    out = x.permute((1, 0, 2))
+    out = out.sum(dim=-1) 
+    out = out.permute((1, 0))
+    return out
+
+def std(x):
+    m = mean(x)
+
+    out = x.permute((2, 0, 1))
+    out = out - m
+    out = out.permute((2, 1, 0))
+
+    out = (out**2).sum(dim=-1)
+    out = torch.sqrt(out + 10e-32) # To ensure differentiability
+    out = out.permute(1, 0)
+    return out
+
 def maximum(x, mask):
     return x.max(dim=-1)[0].squeeze()
 
@@ -157,8 +172,8 @@ def minimum(x, mask):
     return x.min(dim=-1)[0].squeeze()
 
 pooling_methods = {
-    'mean': masked_mean,
-    'std': masked_std,
+    'mean': mean,
+    'std': std,
     'max': maximum,
     'min': minimum
 }
