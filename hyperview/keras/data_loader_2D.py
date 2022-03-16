@@ -42,10 +42,10 @@ class DataGenerator():
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
-        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,stats=self.train_stats)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,stats=self.train_stats)
-        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans,stats=self.eval_stats)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,eval=True,stats=self.eval_stats)
+        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,image_shape,stats=self.train_stats)
+        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,image_shape,stats=self.train_stats)
+        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans,image_shape,stats=self.eval_stats)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,image_shape,eval=True,stats=self.eval_stats)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -58,10 +58,10 @@ class DataGenerator():
             return image_shape,label_shape,
 
     @staticmethod
-    def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None):
+    def _get_data_reader(files, labels, batch_size, transform, image_shape, eval=False,stats=None):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,image_shape),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
         if not eval:
             dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval,stats=stats),num_parallel_calls=tf.data.AUTOTUNE)
@@ -98,14 +98,16 @@ class DataGenerator():
 
     @staticmethod
     def _shape_pad(data,shape):
-        return np.pad(data,
+        padded=np.pad(data,
                       ((0, 0),
                        (0, (shape[0] - data.shape[1])),
                        (0, (shape[1] - data.shape[2]))),
-                      'constant', constant_values=0)
+                      'wrap')
+        #print(padded.shape)
+        return padded
 
     @staticmethod
-    def _deparse_single_image(filename,label):
+    def _deparse_single_image(filename, label, target_shape):
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
                 image = npz['data']
@@ -113,7 +115,11 @@ class DataGenerator():
                 image = (image * mask)
 
                 max_edge = np.max(image.shape[1:])
-                image = DataGenerator._shape_pad(image, (max_edge,max_edge) )
+                if max_edge<target_shape[0]:
+                    max_edge=target_shape
+                else:
+                    max_edge=(max_edge,max_edge)
+                image = DataGenerator._shape_pad(image, max_edge)
                 image = image.transpose((1, 2, 0))
 
                 return image
@@ -127,7 +133,7 @@ class DataGenerator():
 
             augmented = transform(image=image)
             feature = augmented['image']
-            feature=feature/stats[-1] #MAX
+            feature=feature/np.max(stats[-1]) #MAX
             #feature=feature.transpose((2, 0, 1))
             #feature = np.nan_to_num(feature, nan=np.finfo(float).eps, posinf=np.finfo(float).eps, neginf=-np.finfo(float).eps)
             feature = tf.cast(feature, tf.float32)
