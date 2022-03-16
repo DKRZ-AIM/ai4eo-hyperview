@@ -24,6 +24,9 @@ from pytorch_lightning.callbacks.model_summary import ModelSummary
 
 from typing import Optional
 
+from mod_pse import PixelSetEncoder
+from mod_ltae import LTAE
+
 class HyperviewDataModule(pl.LightningDataModule):
     """ Lightning data module for Hyperview data """
 
@@ -115,13 +118,11 @@ class DenseNet(pl.LightningModule):
         self.activation = HyperviewNet.activation_fn(self.args.activation)
         self.loss = HyperviewNet.loss_fn(args.loss)
 
-        n_input_values = ... # TODO
-
-        self.fc1 = torch.nn.Linear(n_input_values, self.args.units_dense1)
+        self.fc1 = torch.nn.Linear(input_shapes, self.args.units_dense1)
         self.dr_fc1 = torch.nn.Dropout(self.args.dropout_dense1)
         self.fc2 = torch.nn.Linear(self.args.units_dense1, self.args.units_dense2)
         self.dr_fc2 = torch.nn.Dropout(self.args.dropout_dense2)
-        self.fc_final = torch.nn.Linear(self.args.units_dense2, n_output_values)
+        self.fc_final = torch.nn.Linear(self.args.units_dense2, len(args.selected_targets))
 
     def forward(self, x):
         x = self.dr_fc1(self.activation(self.fc1(x)))
@@ -132,13 +133,116 @@ class DenseNet(pl.LightningModule):
     @staticmethod
     def add_model_specific_args(parent_parser):
         parser = argparse.ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--batch-size', type=int, default=256)
         parser.add_argument('--activation', type=str, default='relu')
         parser.add_argument('--units-dense1', type=int, default=64)
         parser.add_argument('--units-dense2', type=int, default=64)
         parser.add_argument('--dropout-dense1', type=float, default=0.0)
         parser.add_argument('--dropout-dense2', type=float, default=0.0)
         return parser
+
+class PseLTaeNet(pl.LightningModule):
+    def __init__(self, args, input_shapes):
+        super().__init__()
+        self.args = args
+        self.activation = HyperviewNet.activation_fn(self.args.activation)
+        self.loss = HyperviewNet.loss_fn(args.loss)
+
+        self.spatial_encoder = PixelSetEncoder(input_shapes, 
+                                               mlp1=args.mlp1, 
+                                               pooling=args.pooling, 
+                                               mlp2=args.mlp2, 
+                                               with_extra=args.with_extra,
+                                               extra_size=args.extra_size)
+
+        self.temporal_encoder = LTAE(in_channels=args.mlp2[-1], 
+                                     n_head=args.n_head, 
+                                     d_k=args.d_k,
+                                     d_model=args.d_model, 
+                                     n_neurons=args.mlp3, 
+                                     dropout=args.
+                                     dropout,
+                                     T=args.T, 
+                                     len_max_seq=args.len_max_seq, 
+                                     positions=args.positions, 
+                                     return_att=args.return_att)
+
+        self.decoder = self.get_decoder(args.mlp4)
+        self.param_ratio()
+
+    def get_decoder(n_neurons):
+        """
+        FROM original PseLTae Github
+
+        Returns an MLP with the layer widths specified in n_neurons.
+        Every linear layer but the last one is followed by BatchNorm + ReLu
+
+        args:
+            n_neurons (list): List of int that specifies the width and length of the MLP.
+        """
+        layers = []
+        for i in range(len(n_neurons)-1):
+            layers.append(nn.Linear(n_neurons[i], n_neurons[i+1]))
+            if i < (len(n_neurons) - 2):
+                layers.extend([
+                    nn.BatchNorm1d(n_neurons[i + 1]),
+                    nn.ReLU()
+                ])
+        m = nn.Sequential(*layers)
+        return m
+
+
+    def param_ratio(self):
+        """
+        FROM original PseLTae Github
+        """
+        total = get_ntrainparams(self)
+        s = get_ntrainparams(self.spatial_encoder)
+        t = get_ntrainparams(self.temporal_encoder)
+        c = get_ntrainparams(self.decoder)
+
+        print('TOTAL TRAINABLE PARAMETERS : {}'.format(total))
+        print('RATIOS: Spatial {:5.1f}% , Temporal {:5.1f}% , Classifier {:5.1f}%'.format(s / total * 100,
+                                                                                          t / total * 100,
+                                                                                          c / total * 100))
+        return total
+
+    def forward(self, x):
+        """
+         Args:
+            input(tuple): (Pixel-Set, Pixel-Mask) or ((Pixel-Set, Pixel-Mask), Extra-features)
+            Pixel-Set : Batch_size x Sequence length x Number of pixels
+            Extra-features : Batch_size x Sequence length x Number of features
+        """
+        out = self.spatial_encoder(x) 
+
+        if self.args.return_att:
+            out, att = self.temporal_encoder(out)
+            out = self.decoder(out)
+            return out, att
+        else:
+            out = self.temporal_encoder(out)
+            out = self.decoder(out)
+            return out
+
+    @staticmethod
+    def add_model_specific_args(parent_parser):
+        parser = argparse.ArgumentParser(parents=[parent_parser], add_help=False)
+        parser.add_argument('--input-dim', type=int, default=10)
+        parser.add_argument('--mlp1', type=int, nargs=3, default=[10, 32, 64])
+        parser.add_argument('--pooling', type=str, default='mean_std')
+        parser.add_argument('--mlp2', type=int, default=[132, 128])
+        parser.add_argument('--with-extra', action='store_true')
+        parser.add_argument('--extra-size', type=int, default=4,)
+        parser.add_argument('--n-head', type=int, default=16)
+        parser.add_argument('--d-k', type=int, default=8)
+        parser.add_argument('--d-model', type=int, default=256)
+        parser.add_argument('--mlp3', type=int, default=[256, 128])
+        parser.add_argument('--dropout', type=int, default=0.2)
+        parser.add_argument('--T', type=int, default=1000)
+        parser.add_argument('--len-max-seq', type=int, default=24)
+        parser.add_argument('--positions', type=int, default=None)
+        parser.add_argument('--mlp4', type=int, default=[128, 64, 32, 20],)
+        parser.add_argument('--return-att', action='store_true')
 
 class HyperviewNet(pl.LightningModule):
     def __init__(self, backbone):
@@ -293,10 +397,12 @@ def main():
                          help='''Model architecture. 
                                  dense - DenseNet, simple feed forward NN''')
     parser.add_argument('--learning-rate', type=float, default=1e-3)
+    parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--test-batch-size', type=int, default=512, help='Larger batch size for validation data')
     parser.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'sgd'])
     # data
     parser.add_argument('--data', type=str, help='should enlist train_data.h5, valid_data.h5, (test_data.h5)')
+    parser.add_argument('--selected-targets', type=str, nargs='+', choices=['P2O5', 'K', 'Mg', 'pH'], default=['P2O5', 'K', 'Mg', 'pH'], help='Selected regression targets')
     parser.add_argument('--early-stopping', dest='early_stopping', action='store_true')
     parser.add_argument('--no-early-stopping', dest='early_stopping', action='store_false')
     parser.set_defaults(early_stopping=True)
@@ -316,6 +422,8 @@ def main():
     temp_args, _ = parser.parse_known_args()
     if temp_args.model=='dense':
         parser = DenseNet.add_model_specific_args(parser)
+    elif temp_args.model=='pseltae':
+        parser = PseLTaeNet.add_model_specific_args(parser)
 
     args = parser.parse_args()
 
@@ -356,6 +464,8 @@ def main():
 
         if checkpoint_args.model=='dense':
             backbone = DenseNet(checkpoint_args, input_shapes)
+        elif checkpoint_args.model=='pseltae':
+            backbone = PseLTaeNet(checkpoint_args, input_shapes)
         # load model state from checkpoint
         model = HyperviewNet(backbone)
         model.load_state_dict(checkpoint['state_dict'])
@@ -389,6 +499,8 @@ def main():
         # ----------
         if args.model=='dense':
             model = HyperviewNet(DenseNet(args, input_shapes))
+        elif args.model=='pseltae':
+            model = HyperviewNet(PseLTaeNet(args, input_shapes))
 
         # ----------
         # training
