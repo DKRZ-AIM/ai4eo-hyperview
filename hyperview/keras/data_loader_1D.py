@@ -82,7 +82,7 @@ class DataGenerator():
             [type]: 2D numpy array with soil properties levels
         """
         gt_file = pd.read_csv(file_path)
-        labels = gt_file[["P", "K", "Mg", "pH"]].values / np.array([325,625,400,7.8])
+        labels = gt_file[["P", "K", "Mg", "pH"]].values #/ np.array([325,625,400,7.8])
         return labels
 
     @staticmethod
@@ -105,7 +105,7 @@ class DataGenerator():
 
     @staticmethod
     def _deparse_single_image(filename,label,stats=None,agg=True):
-        #filtering = SpectralCurveFiltering()
+        filtering = SpectralCurveFiltering()
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
 
@@ -115,19 +115,33 @@ class DataGenerator():
                 mask = npz['mask']
                 data = np.ma.MaskedArray(data,mask)
 
-                #arr=filtering(data)
+
                 if agg:
-                    arr = np.ma.mean(data,axis=(1,2))
+                    arr = filtering(data)
+                    arr= arr/ np.linalg.norm(arr)
+                    #arr = np.ma.mean(data,axis=(1,2))
                     var = np.ma.var(data,(1,2))
 
                     dXdl = np.gradient(arr, axis=0)
+                    dXdl = dXdl / np.linalg.norm(dXdl)
+
                     d2Xdl2 = np.gradient(dXdl, axis=0)
+                    d2Xdl2 = d2Xdl2 / np.linalg.norm(d2Xdl2)
+
                     q1 = np.percentile(data, 25, axis=(1, 2))
+                    q1 = q1 / np.linalg.norm(q1)
+
                     q2 = np.percentile(data, 50, axis=(1, 2))
+                    q2 = q2 / np.linalg.norm(q2)
+
                     q3 = np.percentile(data, 75, axis=(1, 2))
+                    q3 = q3 / np.linalg.norm(q3)
+
                     fft = np.fft.fft(arr)
                     real=np.real(fft)
+                    real = real / np.linalg.norm(real)
                     imag=np.imag(fft)
+                    imag = imag / np.linalg.norm(imag)
 
                     return np.concatenate([arr,var,q1,q2,q3,dXdl,d2Xdl2,real,imag],-1)
                 else:

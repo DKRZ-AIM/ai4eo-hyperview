@@ -92,7 +92,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
         #multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
         #multi_chanel_model.add(Dropout(0.25))
         multi_chanel_model.add(tf.keras.layers.BatchNormalization())
-        multi_chanel_model.add(tf.keras.layers.Dense(label_shape, activation='sigmoid'))
+        multi_chanel_model.add(tf.keras.layers.Dense(label_shape, activation='linear'))
 
         out=multi_chanel_model(temporal_input)
         multi_chanel_model.summary()
@@ -151,7 +151,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
         # multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
         # multi_chanel_model.add(Dropout(0.25))
         multi_chanel_model.add(tf.keras.layers.BatchNormalization())
-        multi_chanel_model.add(tf.keras.layers.Dense(label_shape, activation='sigmoid'))
+        multi_chanel_model.add(tf.keras.layers.Dense(label_shape, activation='linear'))
 
         out = multi_chanel_model(temporal_input)
         multi_chanel_model.summary()
@@ -236,7 +236,7 @@ class Encoder(tf.keras.Model):
 
         encoder_hidden = tf.keras.Sequential([tf.keras.layers.Dense(hidden_dim,activation='swish'),tf.keras.layers.BatchNormalization(), tf.keras.layers.Dropout(0.25)])
 
-        encoder_latent = tf.keras.Sequential([tf.keras.layers.Dense(latent_dim,activation='sigmoid'), tf.keras.layers.BatchNormalization()])
+        encoder_latent = tf.keras.Sequential([tf.keras.layers.Dense(latent_dim,activation='linear')])
 
         out = in_layer(temporal_input)
         out = denseblock1(out)
@@ -301,7 +301,7 @@ class Encoder2(tf.keras.Model):
 
         encoder_hidden = tf.keras.Sequential([tf.keras.layers.Dense(hidden_dim,activation='swish'),tf.keras.layers.BatchNormalization(), tf.keras.layers.Dropout(0.25)])
 
-        encoder_latent = tf.keras.Sequential([tf.keras.layers.Dense(latent_dim,activation='sigmoid'), tf.keras.layers.BatchNormalization()])
+        encoder_latent = tf.keras.Sequential([tf.keras.layers.Dense(latent_dim,activation='linear')])
 
         out = in_layer(temporal_input)
         out = denseblock1(out)

@@ -183,7 +183,7 @@ def create_submission(model, reader,log_args):
             predictions=np.concatenate((predictions,y_pred),axis=0)
             files=np.concatenate((files,file_name.numpy()))
 
-    predictions = predictions * np.array([325.0, 625.0, 400.0, 7.8])
+    predictions = predictions #* np.array([325.0, 625.0, 400.0, 7.8])
     sample_index = np.expand_dims(np.array([int(os.path.basename(f.decode('utf-8')).replace(".npz", "")) for f in files]),1)
     predictions = np.concatenate((sample_index, predictions), axis=1)
 
@@ -196,7 +196,7 @@ def create_submission(model, reader,log_args):
 def challenge_eval(model, reader):
     predictions = []
     ground_truth = []
-    y_base = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
+    y_base = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) # /np.array([325.0, 625.0, 400.0, 7.8])
     for X, Y  in reader:
 
         y_pred = model.predict(X)
@@ -233,7 +233,7 @@ def print_history(history, type, file_name):
 
 
 def custom_mse(idx=None):
-    y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
+    y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) #/np.array([325.0, 625.0, 400.0, 7.8])
     @tf.function
     def mse_1(y_true,y_pred):
         y_base = tf.constant(y_base_fact, dtype=tf.float32)
