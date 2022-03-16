@@ -112,7 +112,7 @@ def train_model(model, dataset, log_args, warmup=True):
         model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
-                ReduceLROnPlateau(verbose=1),
+                ReduceLROnPlateau(verbose=1, patience=6),
                 EarlyStopping(patience=25),
                 ModelCheckpoint(#update_weights=True,
                     filepath='{}_model_best.tf'.format(log_args),
