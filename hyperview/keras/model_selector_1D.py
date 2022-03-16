@@ -22,11 +22,24 @@ class SpatioMultiChannellModel(tf.keras.Model):
                 fet_out=SpatioMultiChannellModel.model_builder_1(label_shape, input)
             elif channel_type == 2:
                 fet_out = SpatioMultiChannellModel.model_builder_4(label_shape, input)
+            elif channel_type == 3:
+                fet_out = SpatioMultiChannellModel.model_builder_4(label_shape, input)
         elif model_type == 2:
             if channel_type==1:
                 fet_out=SpatioMultiChannellModel.model_builder_2(label_shape, input)
             elif channel_type == 2:
                 fet_out=SpatioMultiChannellModel.model_builder_3(label_shape, input)
+            elif channel_type == 3:
+                fet_out=SpatioMultiChannellModel.model_builder_3(label_shape, input)
+        elif model_type==3:
+            if channel_type == 1:
+                fet_out = SpatioMultiChannellModel.model_builder_5(label_shape, input)
+            elif channel_type == 2:
+                fet_out = SpatioMultiChannellModel.model_builder_5(label_shape, input)
+            elif channel_type == 3:
+                fet_out = SpatioMultiChannellModel.model_builder_5(label_shape, input)
+
+
 
 
 
@@ -186,6 +199,23 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         # multi_chanel_model=DenseNet(length, num_channel, model_width, problem_type=problem_type, output_nums=output_number).DenseNet169()
         multi_chanel_model = Encoder2(temporal_input, name='total')
+
+        out = multi_chanel_model(temporal_input)
+        multi_chanel_model.summary()
+        return out
+
+    @staticmethod
+    def model_builder_5(label_shape, temporal_input):
+        # feature = tf.squeeze(tf.stack(input_list, axis=1), -4)
+        temporal_input = tf.transpose(temporal_input, (0, 2, 1))
+        length = temporal_input.shape[1]  # Number of Features (or length of the signal)
+        model_width = 32  # Number of Filter or Kernel in the Input Layer (Power of 2 to avoid error)
+        num_channel = 1  # Number of Input Channels
+        problem_type = 'Regression'  # Regression or Classification
+        output_number = label_shape
+
+        multi_chanel_model=DenseNet(length, num_channel, model_width, problem_type=problem_type, output_nums=output_number).DenseNet121()
+        #multi_chanel_model = Encoder2(temporal_input, name='total')
 
         out = multi_chanel_model(temporal_input)
         multi_chanel_model.summary()

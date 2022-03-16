@@ -19,8 +19,8 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
-parser.add_argument('-c', '--channel-type', default=1, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=3, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-c', '--channel-type', default=3, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
@@ -48,13 +48,10 @@ def main():
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
     image_shape = (args.width, args.width)
-    agg=False
-    if args.channel_type==2:
-        agg=True
 
     dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
                             valid_size=0.24,
-                            agg=agg,
+                            channel_type=args.channel_type,
                             batch_size=args.batch_size)
 
 
@@ -112,7 +109,7 @@ def train_model(model, dataset, log_args, warmup=True):
         # lossWeights = {"total": 1, "P": 0 / 1100, "K": 0 / 2500, "Mg": 0 / 2000, "pH": 0 / 3}
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
-        lossWeights = {"total": 0, "P": 0.25 , "K": 0.25 , "Mg": 0.25 , "pH": 0.25 }
+        lossWeights = {"total": 0, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 1 }
         model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [

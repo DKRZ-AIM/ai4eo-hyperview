@@ -12,7 +12,7 @@ from sklearn import preprocessing
 
 
 class DataGenerator():
-    def __init__(self,train_dir, label_dir, eval_dir,valid_size=0.2,agg=True, batch_size=16):
+    def __init__(self,train_dir, label_dir, eval_dir,valid_size=0.2,channel_type=0, batch_size=16):
         """Constructor.
                 """
         self.train_dir=train_dir
@@ -41,10 +41,10 @@ class DataGenerator():
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
-        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,True,agg=agg,stats=self.train_stats)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, True,agg=agg,stats=self.train_stats)
-        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, False,agg=agg,stats=self.eval_stats)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, False,agg=agg,eval=True,stats=self.eval_stats)
+        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,True,channel_type=channel_type,stats=self.train_stats)
+        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, True,channel_type=channel_type,stats=self.train_stats)
+        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, False,channel_type=channel_type,stats=self.eval_stats)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, False,channel_type=channel_type,eval=True,stats=self.eval_stats)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -57,10 +57,10 @@ class DataGenerator():
             return image_shape,label_shape,
 
     @staticmethod
-    def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None,agg=True):
+    def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None,channel_type=0):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,stats,agg),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,stats,channel_type),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
         if not eval:
             dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval),num_parallel_calls=tf.data.AUTOTUNE)
@@ -104,7 +104,7 @@ class DataGenerator():
                       'constant', constant_values=0)
 
     @staticmethod
-    def _deparse_single_image(filename,label,stats=None,agg=True):
+    def _deparse_single_image(filename,label,stats=None,channel_type=0):
         filtering = SpectralCurveFiltering()
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
@@ -116,7 +116,7 @@ class DataGenerator():
                 data = np.ma.MaskedArray(data,mask)
 
 
-                if agg:
+                if channel_type==0:
                     arr = filtering(data)
                     arr= arr/ np.linalg.norm(arr)
                     #arr = np.ma.mean(data,axis=(1,2))
@@ -144,7 +144,14 @@ class DataGenerator():
                     imag = imag / np.linalg.norm(imag)
 
                     return np.concatenate([arr,var,q1,q2,q3,dXdl,d2Xdl2,real,imag],-1)
-                else:
+                elif channel_type==3:
+                    data = data.flatten('F')
+                    data = data[~data.mask]
+                    idx = np.random.randint(int(len(data)/150), size=128)
+                    out=np.concatenate([data[id*150:id*150+150] for id in idx])
+                    return out
+
+                elif channel_type==2:
                     #data = data / stats[-1]
                     data = data.flatten('F')
                     data = data[~data.mask]
@@ -158,7 +165,7 @@ class DataGenerator():
                             data=data[shift:shift+PAD_CONST_2]
                         else:
                             data = data[:PAD_CONST_2]
-                    #pde = pde.T
+                #    #pde = pde.T
                     return data
         [image ] = tf.py_function(_read_npz, [filename], [tf.float32])
 
