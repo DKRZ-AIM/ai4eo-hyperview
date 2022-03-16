@@ -4,6 +4,7 @@ import tensorflow_addons as tfa
 from backbone_models.swin_transformer import SwinTransformer
 from backbone_models.mobile_vit import MobileVit
 from backbone_models.vit import ViT
+from backbone_models.capsule_network import CapsNetBasic
 from tensorflow.keras import activations
 import os
 
@@ -20,6 +21,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
             fet_out=SpatioMultiChannellModel._multi_channel_builder_1(model_type, pretrained, label_shape, temporal_input)
         elif channel_type == 2:
             fet_out = SpatioMultiChannellModel._multi_channel_builder_2(model_type, pretrained, label_shape,temporal_input)
+        elif channel_type==3:
+            fet_out = SpatioMultiChannellModel._multi_channel_builder_3(model_type, pretrained, label_shape,temporal_input)
 
         #input_layer = Input(shape=(16,))
         #reg_head=tf.keras.Sequential()
@@ -108,6 +111,31 @@ class SpatioMultiChannellModel(tf.keras.Model):
         out=multi_chanel_model(feature)
         return out
 
+    @staticmethod
+    def _multi_channel_builder_3(model_type, pretrained, label_shape, temporal_input):
+        t_shape = temporal_input.shape
+        input=tf.squeeze(temporal_input,-4)
+        #input_list = tf.split(temporal_input, num_or_size_splits=int(t_shape[-1] / 3), axis=-1)
+        feature=CapsNetBasic(input,label_shape)
+
+
+
+        multi_chanel_model = tf.keras.Sequential(name='total')
+        multi_chanel_model.add(Flatten())
+        # multi_chanel_model.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
+        # multi_chanel_model.add(Dropout(0.25))
+        # multi_chanel_model.add(BatchNormalization())
+        # multi_chanel_model.add(Dense(256, activation=tf.keras.layers.LeakyReLU()))
+        # multi_chanel_model.add(Dropout(0.25))
+        # multi_chanel_model.add(BatchNormalization())
+        # multi_chanel_model.add(Dense(128, activation=tf.keras.layers.LeakyReLU()))
+        # multi_chanel_model.add(Dropout(0.25))
+        # multi_chanel_model.add(BatchNormalization())
+        multi_chanel_model.add(Dense(label_shape, activation='sigmoid'))
+
+        out = multi_chanel_model(feature(input))
+        return out
+
 
 class BackboneModel(tf.keras.Model):
         def __init__(self, model_type, input_shape,pretrained):
@@ -160,6 +188,7 @@ class BackboneModel(tf.keras.Model):
 
             if model_type == 8:
                 model = ViT(input_shape=input_shape, include_top=False, classifier_activation=None)
+
 
             single_channel_header = tf.keras.Sequential()
             #single_channel_header.add(GlobalAvgPool2D())
