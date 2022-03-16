@@ -5,6 +5,7 @@ from backbone_models.swin_transformer import SwinTransformer
 from backbone_models.mobile_vit import MobileVit
 from backbone_models.vit import ViT
 from backbone_models.capsule_network import CapsNetBasic
+from backbone_models.three_d_convolution_base import ThreeDCNN
 from tensorflow.keras import activations
 import os
 
@@ -23,6 +24,9 @@ class SpatioMultiChannellModel(tf.keras.Model):
             fet_out = SpatioMultiChannellModel._multi_channel_builder_2(model_type, pretrained, label_shape,temporal_input)
         elif channel_type==3:
             fet_out = SpatioMultiChannellModel._multi_channel_builder_3(model_type, pretrained, label_shape,temporal_input)
+        elif channel_type==4:
+            fet_out=SpatioMultiChannellModel._multi_channel_builder_4(model_type, pretrained, label_shape,temporal_input)
+
 
         #input_layer = Input(shape=(16,))
         #reg_head=tf.keras.Sequential()
@@ -135,6 +139,12 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         out = multi_chanel_model(feature(input))
         return out
+
+    @staticmethod
+    def _multi_channel_builder_4(model_type, pretrained, label_shape, temporal_input):
+        inp=tf.transpose(temporal_input, (0, 4, 2, 3, 1))
+        model=ThreeDCNN(inp,label_shape)
+        return model(inp)
 
 
 class BackboneModel(tf.keras.Model):

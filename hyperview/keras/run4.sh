@@ -1,0 +1,6 @@
+#!/bin/bash -x
+
+srun -N1 -p booster --account=hai_ai_4_eo --gres gpu:4 --time=15:00:00 --pty singularity exec --bind "${PWD}:/mnt" --nv ../hyperview_latest.sif python main.py -m 0 -c 4 -l 0.1000 -b 16 -w 128  --num-epochs 60 --train-dir 'train_data/train_data/' --label-dir 'train_data/train_gt.csv' --eval-dir 'test_data/' --out-dir 'modeldir/' &
+srun -N1 -p booster --account=hai_ai_4_eo --gres gpu:4 --time=15:00:00 --pty singularity exec --bind "${PWD}:/mnt" --nv ../hyperview_latest.sif python main.py -m 0 -c 4 -l 0.0100 -b 16 -w 128  --num-epochs 60 --train-dir 'train_data/train_data/' --label-dir 'train_data/train_gt.csv' --eval-dir 'test_data/' --out-dir 'modeldir/' &
+srun -N1 -p booster --account=hai_ai_4_eo --gres gpu:4 --time=15:00:00 --pty singularity exec --bind "${PWD}:/mnt" --nv ../hyperview_latest.sif python main.py -m 0 -c 4 -l 0.0010 -b 16 -w 128  --num-epochs 60 --train-dir 'train_data/train_data/' --label-dir 'train_data/train_gt.csv' --eval-dir 'test_data/' --out-dir 'modeldir/' &
+srun -N1 -p booster --account=hai_ai_4_eo --gres gpu:4 --time=15:00:00 --pty singularity exec --bind "${PWD}:/mnt" --nv ../hyperview_latest.sif python main.py -m 0 -c 4 -l 0.0001 -b 16 -w 128  --num-epochs 60 --train-dir 'train_data/train_data/' --label-dir 'train_data/train_gt.csv' --eval-dir 'test_data/' --out-dir 'modeldir/' &
