@@ -116,7 +116,7 @@ class DataGenerator():
                 data = np.ma.MaskedArray(data,mask)
 
 
-                if channel_type==0:
+                if channel_type==1:
                     arr = filtering(data)
                     arr= arr/ np.linalg.norm(arr)
                     #arr = np.ma.mean(data,axis=(1,2))
