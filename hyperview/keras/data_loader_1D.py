@@ -52,7 +52,7 @@ class DataGenerator():
     @staticmethod
     def _get_dataset_features(reader):
         for feature, mask, in reader.take(1):
-            image_shape=tuple([feature.shape[-2],feature.shape[-1]])
+            image_shape=tuple([*feature.shape[1:]])
             label_shape=mask.shape[-1]
             return image_shape,label_shape,
 
@@ -121,6 +121,7 @@ class DataGenerator():
                     arr= arr/ np.linalg.norm(arr)
                     #arr = np.ma.mean(data,axis=(1,2))
                     var = np.ma.var(data,(1,2))
+                    var = var / np.linalg.norm(var)
 
                     dXdl = np.gradient(arr, axis=0)
                     dXdl = dXdl / np.linalg.norm(dXdl)
@@ -143,12 +144,25 @@ class DataGenerator():
                     imag=np.imag(fft)
                     imag = imag / np.linalg.norm(imag)
 
-                    return np.concatenate([arr,var,q1,q2,q3,dXdl,d2Xdl2,real,imag],-1)
+                    arr=np.expand_dims(arr,1)
+
+                    var = np.expand_dims(var,1)
+                    q1 = np.expand_dims(q1,1)
+                    q2 = np.expand_dims(q2,1)
+                    q3 = np.expand_dims(q3,1)
+                    dXdl = np.expand_dims(dXdl,1)
+                    d2Xdl2 = np.expand_dims(d2Xdl2,1)
+                    real = np.expand_dims(real,1)
+                    imag = np.expand_dims(imag,1)
+                    out=np.concatenate([arr,var,q1,q2,q3,dXdl,d2Xdl2,real,imag],1)
+
+                    return out
                 elif channel_type==3:
                     data = data.flatten('F')
                     data = data[~data.mask]
                     idx = np.random.randint(int(len(data)/150), size=128)
-                    out=np.concatenate([data[id*150:id*150+150] for id in idx])
+                    out=np.concatenate([np.expand_dims(data[id*150:id*150+150],1) for id in idx],1)
+
                     return out
 
                 elif channel_type==2:
@@ -176,13 +190,12 @@ class DataGenerator():
         def _aug_fn(feature):
 
             if not eval:
-                sample = np.random.uniform(low=-0.01, high=0.01, size=feature.shape)
+                sample = np.random.uniform(low=-0.0001, high=0.0001, size=feature.shape)
                 feature=feature + sample
 
             #feature=feature.transpose((2, 0, 1))
             #feature = np.nan_to_num(feature, nan=np.finfo(float).eps, posinf=np.finfo(float).eps, neginf=-np.finfo(float).eps)
             feature = tf.cast(feature, tf.float32)
-
             return feature
         if transform is not None:
             feature = tf.numpy_function(func=_aug_fn, inp=[feature], Tout=[tf.float32])
