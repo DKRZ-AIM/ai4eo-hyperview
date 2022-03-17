@@ -54,13 +54,16 @@ def main():
                             channel_type=args.channel_type,
                             batch_size=args.batch_size)
 
+    experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.channel_type,
+                                                                     args.batch_size, args.num_epochs,
+                                                                     args.learning_rate, args.pretrained, args.width)
 
 
-    experiment_log = '{}/m_{}_c_{}_b_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type,args.channel_type, args.batch_size, args.learning_rate, args.pretrained,args.width)
     model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
-    model=train_model(model, dataset, experiment_log, warmup=True)
-    model=train_model(model, dataset, experiment_log, warmup=False)
-    model.load_weights('{}_model_best.tf'.format(experiment_log))
+    train_model(model, dataset, experiment_log, warmup=True)
+    model.load_weights('{}_model_best.h5'.format(experiment_log))
+    train_model(model, dataset, experiment_log, warmup=False)
+    model.load_weights('{}_model_best.h5'.format(experiment_log))
     evaluate_model(model, dataset)
     create_submission(model, dataset.eval_reader,experiment_log)
 
@@ -116,8 +119,8 @@ def train_model(model, dataset, log_args, warmup=True):
                 ReduceLROnPlateau(verbose=1),
                 EarlyStopping(patience=25),
                 ModelCheckpoint(#update_weights=True,
-                    filepath='{}_model_best.tf'.format(log_args),
-                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
+                    filepath='{}_model_best.h5'.format(log_args),
+                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True),
                 ]
 
         history = model.fit(dataset.train_reader,
@@ -139,7 +142,7 @@ def train_model(model, dataset, log_args, warmup=True):
         loss_log = '{}_pH_loss.jpg'.format(log_args)
         print_history(history, 'pH_loss', loss_log)
 
-        return model
+        #return model
 
 def evaluate_model(model, generators, logging=True):
 

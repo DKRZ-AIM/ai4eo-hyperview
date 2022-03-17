@@ -8,12 +8,14 @@ from backbone_models.capsule_network import CapsNetBasic
 from backbone_models.three_d_convolution_base import ThreeDCNN
 from tensorflow.keras import activations
 import os
+from tensorflow.keras.initializers import RandomNormal
+
 
 
 class SpatioMultiChannellModel(tf.keras.Model):
 
     def __init__(self, model_type, channel_type,input_shape,label_shape,pretrained):
-        super(SpatioMultiChannellModel, self).__init__()
+        #super(SpatioMultiChannellModel, self).__init__()
         #https://keras.io/examples/vision/vivit/
         #https://www.philschmid.de/image-classification-huggingface-transformers-keras
 
@@ -93,6 +95,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
         input_list = tf.split(temporal_input, num_or_size_splits=int(t_shape[-1] / 3), axis=-1)
         out_list=[]
         for input in input_list:
+            #tf.keras.backend.clear_session()
             backbone = BackboneModel(model_type, input.shape[2:], pretrained)
             out_list.append(backbone(tf.squeeze(input, -4)))
 
@@ -225,3 +228,213 @@ class BackboneModel(tf.keras.Model):
             out=tf.keras.layers.Input(shape=4)
             #out=self.call(inp)
             return out.shape[:]
+
+
+
+def get_gan_model(model_type, channel_type,input_shape,label_shape,pretrained):
+    #gen_model = SpatioMultiChannellModel(model_type, channel_type,input_shape,label_shape,pretrained)
+    #gen_model.build(tuple((None, *input_shape)))
+    #gen_model.summary()
+    #disc_model = DiscriminatorModel( input_shape, label_shape)
+    #disc_model.build([tuple((None, *input_shape)),tuple((None, label_shape))])
+    #disc_model.summary()
+    gan=GAN(model_type, channel_type,input_shape,label_shape,pretrained)
+    gan.build(tuple((None, *input_shape)))
+    return gan
+
+
+class GAN(tf.keras.Model):
+    def __init__(self, model_type, channel_type,input_shape,label_shape,pretrained):
+        super(GAN, self).__init__()
+        self.gen_model=SpatioMultiChannellModel(model_type, channel_type,input_shape,label_shape,pretrained)
+        self.gen_model.build(tuple((None, *input_shape)))
+        self.disc_model=DiscriminatorModel( input_shape, label_shape)
+        self.disc_model.build([tuple((None, *input_shape)), tuple((None, label_shape))])
+        self.ema_gen_model = SpatioMultiChannellModel(model_type, channel_type,input_shape,label_shape,pretrained)
+        self.ema_gen_model.build(tuple((None, *input_shape)))
+        #self.ema_gen_model.trainable=False
+        self.ema = 0.99
+
+
+    def call(self, input_image, training=False):
+
+        #input_image, target_image = data
+        if training:
+            generated_images = self.gen_model(input_image, training=training)
+        else:
+            generated_images = self.ema_gen_model(input_image, training=training)
+        #gen_output = self.generate(data, training=training)
+        #disc_real_output = self.disc_model([input_image, target_image], training=training)
+        #disc_gene_output = self.disc_model([input_image, gen_output], training=training)
+        return generated_images
+
+    #def generate(self, data, training=False):
+    #    input_image, target_image = data
+    #    generated_images = self.gen_model(input_image, training=training)
+    #    return generated_images
+
+
+    def compile(self, g_optimizer,d_optimizer, gen_loss,disc_loss,core_metric,batch_size, **kwargs):
+        super(GAN, self).compile(**kwargs)
+        self.d_optimizer = d_optimizer
+        self.g_optimizer = g_optimizer
+        self.gen_loss = gen_loss
+        self.disc_loss=disc_loss
+        self.core_metric=core_metric
+        self.batch_size=batch_size
+
+        self.generator_loss_tracker_train = tf.keras.metrics.Mean(name="loss")
+        self.discriminator_loss_tracker_train = tf.keras.metrics.Mean(name="disc_loss")
+        self.regression_loss_tracker_train = tf.keras.metrics.Mean(name="reg_loss")
+        self.P_tracker_train = tf.keras.metrics.Mean(name="P_loss")
+        self.K_tracker_train = tf.keras.metrics.Mean(name="K_loss")
+        self.Mg_tracker_train = tf.keras.metrics.Mean(name="Mg_loss")
+        self.pH_tracker_train= tf.keras.metrics.Mean(name="pH_loss")
+
+
+    @property
+    def train_metrics(self):
+        return [
+            self.generator_loss_tracker_train,
+            self.discriminator_loss_tracker_train,
+            self.regression_loss_tracker_train,
+            self.P_tracker_train,
+            self.K_tracker_train,
+            self.Mg_tracker_train,
+            self.pH_tracker_train,
+        ]
+
+
+
+
+    def test_step(self, data): #TODO https://keras.io/guides/customizing_what_happens_in_fit/
+        input_image, target_image = data
+        gen_output = self.gen_model(input_image, training=False)
+        disc_real_output = self.disc_model([input_image, target_image], training=False)
+        disc_gene_output = self.disc_model([input_image, gen_output[0]], training=False)
+
+        gen_total_loss, gen_gan_loss, gen_l1_loss = self.gen_loss(disc_gene_output, gen_output[0], target_image,self.batch_size)
+        disc_loss = self.disc_loss(disc_real_output, disc_gene_output, self.batch_size)
+        p_m = self.core_metric(gen_output[0], target_image, 0)
+        k_m = self.core_metric(gen_output[0], target_image, 1)
+        mg_m = self.core_metric(gen_output[0], target_image, 2)
+        ph_m = self.core_metric(gen_output[0], target_image, 3)
+
+        self.generator_loss_tracker_train.update_state(gen_total_loss)
+        self.regression_loss_tracker_train.update_state(gen_l1_loss)
+        self.discriminator_loss_tracker_train.update_state(disc_loss)
+        self.P_tracker_train.update_state(p_m)
+        self.K_tracker_train.update_state(k_m)
+        self.Mg_tracker_train.update_state(mg_m)
+        self.pH_tracker_train.update_state(ph_m)
+
+        return {m.name: m.result() for m in self.train_metrics[:]}
+
+
+    def train_step(self, data):
+        input_image, target_image = data
+        with tf.GradientTape() as gen_tape, tf.GradientTape() as disc_tape:
+            gen_output = self.gen_model(input_image,training=True)
+
+            disc_real_output = self.disc_model([input_image, target_image], training=True)
+            disc_gene_output = self.disc_model([input_image, gen_output[0]], training=True)
+
+            gen_total_loss, gen_gan_loss, gen_l1_loss = self.gen_loss(disc_gene_output, gen_output[0], target_image,self.batch_size)
+            disc_loss = self.disc_loss(disc_real_output, disc_gene_output,self.batch_size)
+            p_m = self.core_metric(gen_output[0], target_image, 0)
+            k_m = self.core_metric(gen_output[0], target_image, 1)
+            mg_m = self.core_metric(gen_output[0], target_image, 2)
+            ph_m = self.core_metric(gen_output[0], target_image, 3)
+
+        generator_gradients = gen_tape.gradient(gen_total_loss,self.gen_model.trainable_variables)
+        discriminator_gradients = disc_tape.gradient(disc_loss,self.disc_model.trainable_variables)
+
+        self.g_optimizer.apply_gradients(zip(generator_gradients,self.gen_model.trainable_variables))
+        self.d_optimizer.apply_gradients(zip(discriminator_gradients,self.disc_model.trainable_variables))
+
+        self.generator_loss_tracker_train.update_state(gen_total_loss)
+        self.regression_loss_tracker_train.update_state(gen_l1_loss)
+        self.discriminator_loss_tracker_train.update_state(disc_loss)
+        self.P_tracker_train.update_state(p_m)
+        self.K_tracker_train.update_state(k_m)
+        self.Mg_tracker_train.update_state(mg_m)
+        self.pH_tracker_train.update_state(ph_m)
+
+        # track the exponential moving average of the generator's weights to decrease
+        # variance in the generation quality
+        for weight, ema_weight in zip(self.gen_model.weights, self.ema_gen_model.weights):
+            ema_weight.assign(self.ema * ema_weight + (1 - self.ema) * weight)
+
+        return {m.name: m.result() for m in self.train_metrics[:]}
+        #disc_real_output = self.disc_model([input_image, target_image], training=True)
+        #disc_gen_output = self.disc_model([input_image, gen_output], training=False)
+
+
+        #labels = tf.concat([tf.ones((batch_size, 1)), tf.zeros((batch_size, 1))], axis=0)
+        # Add random noise to the labels - important trick!
+        #labels += 0.05 * tf.random.uniform(tf.shape(labels))
+        #temp_in = tf.concat([input_image,input_image],axis=0)
+        #temp_tar = tf.concat([target_image, gen_output], axis=0)
+        # Train the discriminator
+        #with tf.GradientTape(persistent=False) as tape:
+        #    disc_output = self.disc_model([temp_in, temp_tar])
+        #    d_loss = self.loss_fn(labels, disc_output)
+        #grads = tape.gradient(d_loss, self.disc_model.trainable_weights)
+        #self.d_optimizer.apply_gradients(zip(grads, self.disc_model.trainable_weights))
+
+        #misleading_labels = tf.zeros((batch_size, 1))
+        #with tf.GradientTape() as tape:
+        #    gen_output = self.gen_model(input_image)
+        #    predictions = self.disc_model([input_image, gen_output])
+        #    g_loss = self.loss_fn(misleading_labels, predictions)
+        #grads = tape.gradient(g_loss, self.generator.trainable_weights)
+        #self.g_optimizer.apply_gradients(zip(grads, self.gen_model.trainable_weights))
+        #return {"d_loss": d_loss, "g_loss": g_loss}
+
+class DiscriminatorModel(tf.keras.Model):
+
+        def __init__(self, image_stack_shape, target_shape):
+            # super(SpatioTemporalModel, self).__init__()
+            #in_shape=(28,28,1)
+            init = RandomNormal(stddev=0.02)
+            # source image input
+            in_src_image = Input(shape=image_stack_shape)
+            inp = tf.squeeze(in_src_image, 1)
+            # label input
+            in_label = Input(shape=(target_shape,))
+            li = Embedding(target_shape, 150)(in_label)
+            # scale up to image dimensions with linear activation
+            n_nodes = image_stack_shape[1] * image_stack_shape[2]* image_stack_shape[3]/target_shape
+            li = Dense(int(n_nodes))(li)
+            # reshape to additional channel
+            li = Reshape((image_stack_shape[1] , image_stack_shape[2], image_stack_shape[3]))(li)
+
+
+
+            # concatenate images channel-wise
+            merged = Concatenate()([inp, li])
+            # C64
+            d = Conv2D(512, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(merged)
+            d = LeakyReLU(alpha=0.2)(d)
+            # C128
+            d = Conv2D(512, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(d)
+            d = BatchNormalization()(d)
+            d = LeakyReLU(alpha=0.2)(d)
+            # C256
+            d = Conv2D(256, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(d)
+            d = BatchNormalization()(d)
+            d = LeakyReLU(alpha=0.2)(d)
+            # C512
+            d = Conv2D(256, (4, 4), strides=(2, 2), padding='same', kernel_initializer=init)(d)
+            d = BatchNormalization()(d)
+            d = LeakyReLU(alpha=0.2)(d)
+            # second last output layer
+            d = Conv2D(128, (4, 4), padding='same', kernel_initializer=init)(d)
+            d = BatchNormalization()(d)
+            d = LeakyReLU(alpha=0.2)(d)
+            # patch output
+            d = Conv2D(1, (4, 4), padding='same', kernel_initializer=init)(d)
+            d = Flatten()(d)
+            d = Dense(1,activation='sigmoid')(d)
+
+            super(DiscriminatorModel, self).__init__(inputs=[in_src_image, in_label], outputs=d)

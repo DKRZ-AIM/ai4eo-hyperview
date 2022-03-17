@@ -131,9 +131,9 @@ class DataGenerator():
     def _trans_single_image(feature,label,filename,transform=None,eval=True,stats=None):
         def _aug_fn(image):
 
+            image = image / np.max(stats[-1])  # MAX
             augmented = transform(image=image)
             feature = augmented['image']
-            feature=feature/np.max(stats[-1]) #MAX
             #feature=feature.transpose((2, 0, 1))
             #feature = np.nan_to_num(feature, nan=np.finfo(float).eps, posinf=np.finfo(float).eps, neginf=-np.finfo(float).eps)
             feature = tf.cast(feature, tf.float32)
@@ -197,12 +197,12 @@ class DataGenerator():
         train_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
             #A.Normalize(mean=train_stats[0], std=train_stats[1], max_pixel_value=np.max(train_stats[2])),
-            A.GaussNoise(var_limit=0.0025),
+            A.GaussNoise(var_limit=0.000025),
             A.RandomRotate90(),
-            A.Rotate(),
-            A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.98, 1.02), p=0.5),
+            #A.Rotate(),
+            #A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.98, 1.02), p=0.5),
             A.Flip(),
-            A.ShiftScaleRotate(rotate_limit=0, shift_limit_x=0.02, shift_limit_y=0.02),
+            #A.ShiftScaleRotate(rotate_limit=0, shift_limit_x=0.02, shift_limit_y=0.02),
             # A.RandomBrightnessContrast(),
 
         ])
