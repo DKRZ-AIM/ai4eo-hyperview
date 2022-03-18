@@ -62,10 +62,26 @@ class HyperviewDataModule(pl.LightningDataModule):
             dataset = HyperviewDataset('train', self.args)
 
             # create a holdout dataset
-            nh = int( len(dataset.y) * self.args.f_holdout )
-            self.train_data, self.holdout_data = random_split(dataset, 
-                                                             [len(dataset.y) - nh, nh], 
-                                                             generator=torch.Generator().manual_seed(815))
+            nh = int( len(dataset.unique_field_ids) * self.args.f_holdout )
+
+            ix = np.arange( len(dataset.unique_field_ids) )
+            np.random.shuffle(ix)
+            train_ufids = dataset.unique_field_ids[nh:]
+            holdo_ufids = dataset.unique_field_ids[:nh]
+
+            train_idcs = []
+            for ufi in train_ufids:
+                train_idcs.extend(np.where(dataset.field_ids == ufi)[0])
+
+            holdo_idcs = []
+            for ufi in holdo_ufids:
+                holdo_idcs.extend(np.where(dataset.field_ids == ufi)[0])
+
+            print(f'Unique field IDs in training: {len(train_ufids)}')
+            print(f'Unique field IDs in holdout:  {len(holdo_ufids)}')
+
+            self.train_data   = Subset(dataset, train_idcs)
+            self.holdout_data = Subset(dataset, holdo_idcs)
 
             self.input_shapes = dataset.X.shape[1:]
             self.setup_folds()
@@ -86,6 +102,7 @@ class HyperviewDataModule(pl.LightningDataModule):
             for i, s in enumerate(self.args.selected_targets):
                 print(f'Train (all folds): {s:4s}  Mean = {np.mean(y_train[:, i]):.2f}, Std = {np.std(y_train[:, i]):.2f}')
                 print(f'Holdout:           {s:4s}  Mean = {np.mean(y_holdout[:, i]):.2f}, Std = {np.std(y_holdout[:, i]):.2f}')
+            print(f'Samples in holdout: {len(y_holdout)}')
 
             # load the test data anyway
             self.test_data = HyperviewDataset('test', self.args)
@@ -190,6 +207,8 @@ class HyperviewDataset(Dataset):
             [type]: A np array with spectral curve for each sample.
         Assigns self.field_ids:
             np array of field ids for later reference
+        Assigns self.unique_field_ids:
+            np array of *unique* field ids for later reference
         """
         data = []
         field_ids = []
@@ -237,6 +256,7 @@ class HyperviewDataset(Dataset):
 
         self.X = torch.tensor(data, dtype=torch.float32)
         self.field_ids = np.array(field_ids)
+        self.unique_field_ids = np.unique(self.field_ids)
 
         print(f'Finished loading data in {time.time() - start_time:.0f} seconds')
         print('*'*40 + '\n')
