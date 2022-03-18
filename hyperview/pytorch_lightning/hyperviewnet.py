@@ -35,7 +35,7 @@ from mod_ltae import LTAE
 
 import mod_utils
 
-class HyperviewDataModule(mod_utils.BaseKFoldDataModule):
+class HyperviewDataModule(pl.LightningDataModule):
     """ Lightning data module for Hyperview data """
 
     def __init__(self, args):
@@ -65,8 +65,11 @@ class HyperviewDataModule(mod_utils.BaseKFoldDataModule):
             self.train_data, self.holdout_data = random_split(dataset, [1600, 132])
 
             self.input_shapes = dataset.X.shape[1:]
+            self.setup_folds()
+
         if stage in (None, 'test'):
             self.test_data = HyperviewDataset('test', self.args)
+
 
     def train_dataloader(self):
         return DataLoader(self.train_fold, batch_size=self.args.batch_size, 
@@ -84,11 +87,17 @@ class HyperviewDataModule(mod_utils.BaseKFoldDataModule):
         return DataLoader(self.test_data, batch_size=self.args.test_batch_size, 
                           num_workers=self.args.num_workers, shuffle=False, drop_last=False)
 
-    def setup_folds(self, num_folds: int) -> None:
-        self.num_folds = num_folds
-        self.splits = [split for split in KFold(num_folds).split(range(len(self.train_data)))]
+    def teardown(self, stage):
+        ''' overwrite parent method '''
+        pass
 
-    def setup_fold_index(self, fold_index: int) -> None:
+    def setup_folds(self):
+        ''' Set up splits for k-fold cross validation '''
+        kfold = KFold(self.args.k_fold, shuffle=True, random_state=761)
+        self.splits = [split for split in kfold.split(range(len(self.train_data)))]
+
+    def setup_fold_index(self, fold_index: int):
+        ''' Select split for cross validation '''
         train_indices, valid_indices = self.splits[fold_index]
         self.train_fold = Subset(self.train_data, train_indices)
         self.valid_fold = Subset(self.train_data, valid_indices)
@@ -385,11 +394,20 @@ class HyperviewNet(pl.LightningModule):
         self.log('best_epoch', self.best_epoch)
 
     def test_step(self, batch, batch_idx):
-        x, y, _ = batch
+        x, y, bl = batch
         y_pred = self.backbone(x)
         #y_pred = torch.squeeze(y_pred, dim=1)
         loss = self.backbone.loss(y_pred, y)
-        self.log('test_loss', loss)
+        score = 0
+        for i in range(len(y[0])):
+            loss_baseline = self.backbone.loss(bl[:,i], y[:,i])
+            loss_model    = self.backbone.loss(y_pred[:,i], y[:,i])
+            # print(i, loss_model, loss_baseline, loss_model/loss_baseline)
+            score += loss_model / loss_baseline
+        score /= (i+1)
+
+        self.log('holdout_loss', loss)
+        self.log('holdout_baseline_score', score, on_epoch=True)
 
     def predict_step(self, batch, batch_idx):
         x, y, _ = batch
@@ -432,13 +450,13 @@ class HyperviewNet(pl.LightningModule):
             return mod_utils.relative_mse
 
     @staticmethod
-    def best_checkpoint_path(save_model_path, best_epoch):
+    def best_checkpoint_path(save_model_path, best_epoch, fold=1):
         '''Path to best checkpoint'''
-        ckpt_path = os.path.join(os.path.dirname(save_model_path), 'checkpoint', f"hyperviewnet-epoch={best_epoch}.ckpt")
+        ckpt_path = os.path.join(os.path.dirname(save_model_path), 'checkpoint', f"hyperviewnet-fold={fold}-epoch={best_epoch}.ckpt")
         all_ckpts = os.listdir(os.path.dirname(ckpt_path))
         # If the checkpoint already exists, lightning creates "*-v1.ckpt"
         only_ckpt = ~np.any([f'-v{best_epoch}' in ckpt for ckpt in all_ckpts])
-        assert only_ckpt, f'Cannot load checkpoint: found versioned checkpoints for best_epoch {best_epoch} in {os.path.dirname(ckpt_path)}'
+        assert only_ckpt, f'Cannot load checkpoint {ckpt_path}: found versioned checkpoints for best_epoch {best_epoch} in {os.path.dirname(ckpt_path)}'
         return ckpt_path
 
 class HyperviewMetricCallbacks(Callback):
@@ -603,70 +621,114 @@ def main():
         cdm = HyperviewDataModule(args)
         cdm.setup(stage='fit')
 
-        #train_loader = cdm.train_dataloader()
-        #valid_loader = cdm.val_dataloader()
-
         if args.verbose:
             print('Input shapes', cdm.input_shapes)
-        # ----------
-        # model
-        # ----------
-        if args.model=='dense':
-            model = HyperviewNet(DenseNet(args, cdm.input_shapes))
-        elif args.model=='pseltae':
-            model = HyperviewNet(PseLTaeNet(args, cdm.input_shapes))
+
+        # -----------
+        # Holdout set
+        # -----------
+
+        holdout_loader = cdm.test_dataloader()
 
         # ----------
-        # training
+        # K-Fold CV
         # ----------
-        callbacks = [HyperviewMetricCallbacks(args), ModelSummary(max_depth=-1)] # model checkpoint is a model callback
-        if args.early_stopping:
-            callbacks.append(EarlyStopping(monitor='valid_loss', patience=args.patience, mode='min'))
 
-        trainer = pl.Trainer.from_argparse_args(args, 
+        holdout_scores = []
+        valid_scores   = []
+        trained_epochs = []
+
+        for fold in range(args.k_fold):
+            print(f'\nStarting fold {fold+1} of {args.k_fold}')
+
+            cdm.setup_fold_index(fold)
+            train_loader = cdm.train_dataloader()
+            valid_loader = cdm.val_dataloader()
+
+            # ----------
+            # model
+            # ----------
+            if args.model=='dense':
+                model = HyperviewNet(DenseNet(args, cdm.input_shapes))
+            elif args.model=='pseltae':
+                model = HyperviewNet(PseLTaeNet(args, cdm.input_shapes))
+
+            # ----------
+            # training
+            # ----------
+            callbacks = [HyperviewMetricCallbacks(args), ModelSummary(max_depth=-1)] # model checkpoint is a model callback
+            if args.early_stopping:
+                callbacks.append(EarlyStopping(monitor='valid_loss', patience=args.patience, mode='min'))
+
+            trainer = pl.Trainer.from_argparse_args(args, 
                                                 fast_dev_run=False, # debug option
                                                 logger=False,
                                                 callbacks=callbacks, 
                                                 enable_progress_bar=False,
+                                                enable_model_summary=fold==0, # print only on 1st fold
                                                 num_sanity_val_steps=0) # skip validation check
 
-        internal_fit_loop = trainer.fit_loop
-        trainer.fit_loop = mod_utils.KFoldLoop(args.k_fold, export_path="./k_fold/")
-        trainer.fit_loop.connect(internal_fit_loop)
-        trainer.fit(model, cdm)
+            trainer.fit(model, cdm)
 
-	# TODO this goes inside the cross validation
-        best_epoch = int(trainer.callback_metrics["best_epoch"])
-        ckpt_path = HyperviewNet.best_checkpoint_path(args.save_model_path, best_epoch)
-        print(f'\nLoading best model from {ckpt_path}')
-        trainer.validate(dataloaders=valid_loader, ckpt_path=ckpt_path)
-        #model.load_state_dict(torch.load(ckpt_path)['state_dict'])
-        model.eval()
-        # make predictions on *validation set*
-        y_pred = trainer.predict(model=model, dataloaders=[valid_loader])
-        y_pred = torch.cat(y_pred).detach().cpu().numpy().squeeze()
+            # TODO reset the model weights
+            # TODO reset the trainer?
+            # TODO predict on the holdout set
+            # TODO store the model to disk
 
-        y_baseline = np.tile(cdm.train_data.dataset.baseline, len(y_pred)).reshape(len(y_pred), -1)
+            best_epoch = int(trainer.callback_metrics["best_epoch"])
+            ckpt_path = HyperviewNet.best_checkpoint_path(args.save_model_path, best_epoch, fold=fold)
+            trainer.save_checkpoint(ckpt_path) # TODO check if this applied early stopping ???
+            print(f'\nLoading best model from {ckpt_path}')
+            valid_dict = trainer.validate(dataloaders=valid_loader, ckpt_path=ckpt_path)[0]
+            print(valid_dict)
+            valid_scores.append(valid_dict['baseline_score'])
+            trained_epochs.append(valid_dict['best_epoch'])
+            #model.load_state_dict(torch.load(ckpt_path)['state_dict'])
+            model.eval()
+            # make predictions on *holdout set*
+            y_pred = trainer.predict(model=model, dataloaders=[holdout_loader])
+            y_pred = torch.cat(y_pred).detach().cpu().numpy().squeeze()
+
+            y_baseline = np.tile(cdm.train_data.dataset.baseline, len(y_pred)).reshape(len(y_pred), -1)
         
-        y_true = cdm.valid_data.dataset.y[1300:]
+            y_true = cdm.holdout_data.dataset.y
+            ho_idx = cdm.holdout_data.indices
+            y_true = y_true[ho_idx].reshape((len(ho_idx), len(args.selected_targets)))
+            y_pred = y_pred.reshape((len(ho_idx), len(args.selected_targets)))
 
-        score = 0
+            score = 0
         
-        for i, sv in enumerate(args.selected_targets):
-            mse_model = mean_squared_error(y_true[:,i], y_pred[:,i])
-            mse_baseline = mean_squared_error(y_true[:,i], y_baseline[:,i])
+            for i, sv in enumerate(args.selected_targets):
+                mse_model = mean_squared_error(y_true[:,i], y_pred[:,i])
+                mse_baseline = mean_squared_error(y_true[:,i], y_baseline[:,i])
 
-            score += mse_model / mse_baseline
+                score += mse_model / mse_baseline
 
-            print('*'*40)
-            print('   ', sv)
-            print(f'MSE (model): {mse_model:.2f}, MSE (baseline): {mse_baseline:.2f}')
-            print(f'Relative score: {100 * (mse_model - mse_baseline) / mse_baseline:.2f} %')
-            print('*'*40)
+                print('*'*40)
+                print('   ', sv)
+                print(f'MSE (model): {mse_model:.2f}, MSE (baseline): {mse_baseline:.2f}')
+                print(f'Relative score: {100 * (mse_model - mse_baseline) / mse_baseline:.2f} %')
+                print('*'*40)
 
-        score /= len(args.selected_targets)
+            score /= len(args.selected_targets)
 
-        print(f'SCORE: {score:.4f}')
+            holdout_scores.append(score)
+
+            print(f'SCORE: {score:.4f}')
+
+        # formatted output
+        str_v = ''
+        str_h = ''
+        for vs, hs in zip(valid_scores, holdout_scores):
+            str_v += f'    {sv:.2f}'
+            str_h += f'    {sh:.2f}'
+
+        print(f'\nReport after finishing {args.k_fold} folds')
+        print('All valid set scores', str_v)
+        print(f'Average valid set score: {np.mean(valid_scores):.2f}')
+        print('All holdout set scores', str_h)
+        print(f'Average holdout set score: {np.mean(holdout_scores):.2f}')
+        print('Trained epochs', trained_epochs)
 
     # procedures that take place in fit and in test stage
     # save predictions

@@ -129,8 +129,8 @@ class KFoldLoop(Loop):
         self.trainer.save_checkpoint(os.path.join(self.export_path, f"model.{self.current_fold}.pt"))
         # restore the original weights + optimizers and schedulers.
         self.trainer.lightning_module.load_state_dict(self.lightning_module_state_dict)
-        # TODO self.trainer._accelerator_connector.strategy.setup_optimizers(self.trainer)
-        # TODO CHECK self.replace(fit_loop=FitLoop)
+        self.trainer._accelerator_connector.strategy.setup_optimizers(self.trainer)
+        self.replace(fit_loop=FitLoop)
 
     def on_run_end(self) -> None:
         """Used to compute the performance of the ensemble model on the test set."""
@@ -170,6 +170,8 @@ class EnsembleVotingModel(pl.LightningModule):
         super().__init__()
         # Create `num_folds` models with their associated fold weights
         self.models = torch.nn.ModuleList([model_cls.load_from_checkpoint(p) for p in checkpoint_paths])
+        # TODO add backbone logic here
+        # TODO change the loss function and evalution function
         self.test_acc = Accuracy()
 
     def test_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> None:
