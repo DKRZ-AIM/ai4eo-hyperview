@@ -124,25 +124,25 @@ class DataGenerator():
                     var = var / np.linalg.norm(var)
 
                     dXdl = np.gradient(arr, axis=0)
-                    dXdl = dXdl / np.linalg.norm(dXdl)
+                    #dXdl = dXdl / np.linalg.norm(dXdl)
 
                     d2Xdl2 = np.gradient(dXdl, axis=0)
-                    d2Xdl2 = d2Xdl2 / np.linalg.norm(d2Xdl2)
+                    #d2Xdl2 = d2Xdl2 / np.linalg.norm(d2Xdl2)
 
                     q1 = np.percentile(data, 25, axis=(1, 2))
-                    q1 = q1 / np.linalg.norm(q1)
+                    #q1 = q1 / np.linalg.norm(q1)
 
                     q2 = np.percentile(data, 50, axis=(1, 2))
-                    q2 = q2 / np.linalg.norm(q2)
+                    #q2 = q2 / np.linalg.norm(q2)
 
                     q3 = np.percentile(data, 75, axis=(1, 2))
-                    q3 = q3 / np.linalg.norm(q3)
+                    #q3 = q3 / np.linalg.norm(q3)
 
                     fft = np.fft.fft(arr)
                     real=np.real(fft)
-                    real = real / np.linalg.norm(real)
+                    #real = real / np.linalg.norm(real)
                     imag=np.imag(fft)
-                    imag = imag / np.linalg.norm(imag)
+                    #imag = imag / np.linalg.norm(imag)
 
                     arr=np.expand_dims(arr,1)
 
@@ -161,7 +161,29 @@ class DataGenerator():
                     data = data.flatten('F')
                     data = data[~data.mask]
                     idx = np.random.randint(int(len(data)/150), size=128)
-                    out=np.concatenate([np.expand_dims(data[id*150:id*150+150],1) for id in idx],1)
+                    data_list=[]
+                    for id in idx:
+                        da=data[id*150:id*150+150]
+                        dXdl = np.gradient(da, axis=0)
+                        dXdl2 = np.gradient(dXdl, axis=0)
+                        fft = np.fft.fft(da)
+                        real = np.real(fft)
+                        imag = np.imag(fft)
+
+                        da=np.expand_dims(da,1)
+                        dXdl = np.expand_dims(dXdl, 1)
+                        dXdl2 = np.expand_dims(dXdl2, 1)
+                        real = np.expand_dims(real, 1)
+                        imag = np.expand_dims(imag, 1)
+
+                        data_list.append(da)
+                        data_list.append(dXdl)
+                        data_list.append(dXdl2)
+                        data_list.append(real)
+                        data_list.append(imag)
+                        #TODO this can be reimplemented for 2D image reading
+
+                    out=np.concatenate(data_list,1)
 
                     return out
 
