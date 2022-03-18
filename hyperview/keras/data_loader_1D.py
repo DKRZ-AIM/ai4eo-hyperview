@@ -109,6 +109,7 @@ class DataGenerator():
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
 
+                print(np.max(stats[2])*np.max(stats[0]))
                 PAD_CONST_1 = 6715800
                 PAD_CONST_2 = int(1228800)
                 data=npz['data']/np.max(stats[-1])
@@ -129,13 +130,13 @@ class DataGenerator():
                     d2Xdl2 = np.gradient(dXdl, axis=0)
                     #d2Xdl2 = d2Xdl2 / np.linalg.norm(d2Xdl2)
 
-                    q1 = np.percentile(data, 25, axis=(1, 2))
+                    #q1 = np.percentile(data, 25, axis=(1, 2))
                     #q1 = q1 / np.linalg.norm(q1)
 
-                    q2 = np.percentile(data, 50, axis=(1, 2))
+                    #q2 = np.percentile(data, 50, axis=(1, 2))
                     #q2 = q2 / np.linalg.norm(q2)
 
-                    q3 = np.percentile(data, 75, axis=(1, 2))
+                    #q3 = np.percentile(data, 75, axis=(1, 2))
                     #q3 = q3 / np.linalg.norm(q3)
 
                     fft = np.fft.fft(arr)
@@ -147,14 +148,14 @@ class DataGenerator():
                     arr=np.expand_dims(arr,1)
 
                     var = np.expand_dims(var,1)
-                    q1 = np.expand_dims(q1,1)
-                    q2 = np.expand_dims(q2,1)
-                    q3 = np.expand_dims(q3,1)
+                    #q1 = np.expand_dims(q1,1)
+                    #q2 = np.expand_dims(q2,1)
+                    #q3 = np.expand_dims(q3,1)
                     dXdl = np.expand_dims(dXdl,1)
                     d2Xdl2 = np.expand_dims(d2Xdl2,1)
                     real = np.expand_dims(real,1)
                     imag = np.expand_dims(imag,1)
-                    out=np.concatenate([arr,var,q1,q2,q3,dXdl,d2Xdl2,real,imag],1)
+                    out=np.concatenate([arr,var,dXdl,d2Xdl2,real,imag],1)
 
                     return out
                 elif channel_type==3:
