@@ -87,6 +87,8 @@ class HyperviewDataModule(pl.LightningDataModule):
                 print(f'Train (all folds): {s:4s}  Mean = {np.mean(y_train[:, i]):.2f}, Std = {np.std(y_train[:, i]):.2f}')
                 print(f'Holdout:           {s:4s}  Mean = {np.mean(y_holdout[:, i]):.2f}, Std = {np.std(y_holdout[:, i]):.2f}')
 
+            # load the test data anyway
+            self.test_data = HyperviewDataset('test', self.args)
         if stage in (None, 'test'):
             self.test_data = HyperviewDataset('test', self.args)
 
@@ -99,8 +101,12 @@ class HyperviewDataModule(pl.LightningDataModule):
         return DataLoader(self.valid_fold, batch_size=self.args.test_batch_size, 
                           num_workers=self.args.num_workers, shuffle=False, drop_last=False)
 
-    def test_dataloader(self):
+    def holdout_dataloader(self):
         return DataLoader(self.holdout_data, batch_size=self.args.test_batch_size, 
+                          num_workers=self.args.num_workers, shuffle=False, drop_last=False)
+
+    def test_dataloader(self):
+        return DataLoader(self.test_data, batch_size=self.args.test_batch_size, 
                           num_workers=self.args.num_workers, shuffle=False, drop_last=False)
 
     def predict_dataloader(self, args): # predicts on test set
@@ -167,7 +173,6 @@ class HyperviewDataset(Dataset):
         print(f'Loaded dataset {flag}')
         print(f'Samples: {self.X.shape}')
 
-
         if flag == 'train':
             self.load_gt()
 
@@ -183,12 +188,21 @@ class HyperviewDataset(Dataset):
             flag (str): subdirectory
         Assigns self.X:
             [type]: A np array with spectral curve for each sample.
+        Assigns self.field_ids:
+            np array of field ids for later reference
         """
         data = []
+        field_ids = []
+
         if self.args.data_processing == 'spectral-curve':
             filtering = mod_utils.SpectralCurveFiltering()
         elif self.args.data_processing == 'random-selection':
-            filtering = mod_utils.RandomPixelSelector(self.args.n_pixels)
+            if flag == 'test':
+                print('Ignore --f-augment in test set')
+                filtering = mod_utils.RandomPixelSelector(self.args.n_pixels, 1)
+            else:
+                filtering = mod_utils.RandomPixelSelector(self.args.n_pixels, self.args.f_augment)
+
         raw_data_root = os.path.join(self.args.data, f'{flag}_data')
         if flag == 'train':
             raw_data_root = os.path.join(raw_data_root, 'train_data')
@@ -208,9 +222,22 @@ class HyperviewDataset(Dataset):
             arr = filtering(arr)
             data.append(arr)
 
+            field_id = os.path.basename(file_name.replace(".npz", ""))
+
+            if self.args.f_augment == 1:
+                field_ids.append(field_id)
+            else:
+                field_ids.extend( [field_id] * self.args.f_augment )
+
         data = np.array(data) / self.args.c_norm
         print(f'Maximum value after normalization: {np.max(data)}')
+
+        old_shape = data.shape
+        data = data.reshape( old_shape[0] * old_shape[1], old_shape[2], old_shape[3], old_shape[4] )
+
         self.X = torch.tensor(data, dtype=torch.float32)
+        self.field_ids = np.array(field_ids)
+
         print(f'Finished loading data in {time.time() - start_time:.0f} seconds')
         print('*'*40 + '\n')
     
@@ -219,6 +246,8 @@ class HyperviewDataset(Dataset):
             Load labels for train set from the ground truth file.
 
             Keep only selected targets
+
+            If f-augment, repeat labels
 
         Assigns y:
             [type]: 2D numpy array with soil properties levels
@@ -231,7 +260,15 @@ class HyperviewDataset(Dataset):
         for i,sv in enumerate(self.args.selected_targets):
             print(f'Baseline for {sv:2s}: {baseline[i]:.2f}')
         self.baseline = baseline
-        self.y = torch.tensor(labels.reshape(len(labels), len(self.args.selected_targets)), dtype=torch.float32)
+
+        # first add the extra dimension if only one label was selected
+        labels = labels.reshape( len(labels), len(self.args.selected_targets) )
+        # then tile if f_augment
+        if self.args.f_augment > 1:
+            labels = np.tile( labels, self.args.f_augment )
+            labels = labels.reshape((-1, len(self.args.selected_targets)))
+
+        self.y = torch.tensor(labels, dtype=torch.float32)
         
     def __len__(self):
         return self.X.shape[0]
@@ -383,6 +420,7 @@ class PseLTaeNet(pl.LightningModule):
         parser.add_argument('--return-att', action='store_true')
         # releated to pseltae data
         parser.add_argument('--n-pixels', type=int, default=32, help='Random pixels to select if --data-processing = random-selection')
+        parser.add_argument('--f-augment', type=int, default=1, help='Data augmentation factor')
         return parser
 
 class HyperviewNet(pl.LightningModule):
@@ -664,7 +702,14 @@ def main():
         # Holdout set
         # -----------
 
-        holdout_loader = cdm.test_dataloader()
+        holdout_loader = cdm.holdout_dataloader()
+
+        # -----------
+        # Test set
+        # -----------
+
+        test_loader = cdm.test_dataloader()
+        y_preds = []
 
         # ----------
         # K-Fold CV
@@ -675,7 +720,7 @@ def main():
         trained_epochs = []
 
         for fold in range(args.k_fold):
-            print(f'\nStarting fold {fold+1} of {args.k_fold}')
+            print(f'\nStarting fold {fold} of {args.k_fold}')
 
             cdm.setup_fold_index(fold)
             train_loader = cdm.train_dataloader()
@@ -694,10 +739,10 @@ def main():
             # ----------
             callbacks = [HyperviewMetricCallbacks(args), ModelSummary(max_depth=-1)] # model checkpoint is a model callback
             if args.early_stopping:
-                callbacks.append(EarlyStopping(monitor='valid_loss', patience=args.patience, mode='min'))
+                callbacks.append(EarlyStopping(monitor='baseline_score', patience=args.patience, mode='min'))
 
             checkpoint_callback = ModelCheckpoint(monitor='valid_loss', mode='min',
-                     dirpath=os.path.join(os.path.dirname(args.save_model_path), 'checkpoint', f'fold-{fold+1}'),
+                     dirpath=os.path.join(os.path.dirname(args.save_model_path), 'checkpoint', f'fold-{fold}'),
                      filename="hyperviewnet-{epoch}")
 
             callbacks.append(checkpoint_callback)
@@ -725,20 +770,20 @@ def main():
             #model.load_state_dict(torch.load(ckpt_path)['state_dict'])
             model.eval()
             # make predictions on *holdout set*
-            y_pred = trainer.predict(model=model, dataloaders=[holdout_loader])
-            y_pred = torch.cat(y_pred).detach().cpu().numpy().squeeze()
+            y_hold = trainer.predict(model=model, dataloaders=[holdout_loader])
+            y_hold = torch.cat(y_hold).detach().cpu().numpy().squeeze()
 
-            y_baseline = np.tile(cdm.train_data.dataset.baseline, len(y_pred)).reshape(len(y_pred), -1)
+            y_baseline = np.tile(cdm.train_data.dataset.baseline, len(y_hold)).reshape(len(y_hold), -1)
         
             y_true = cdm.holdout_data.dataset.y
             ho_idx = cdm.holdout_data.indices
             y_true = y_true[ho_idx].reshape((len(ho_idx), len(args.selected_targets)))
-            y_pred = y_pred.reshape((len(ho_idx), len(args.selected_targets)))
+            y_hold = y_hold.reshape((len(ho_idx), len(args.selected_targets)))
 
             score = 0
         
             for i, sv in enumerate(args.selected_targets):
-                mse_model = mean_squared_error(y_true[:,i], y_pred[:,i])
+                mse_model = mean_squared_error(y_true[:,i], y_hold[:,i])
                 mse_baseline = mean_squared_error(y_true[:,i], y_baseline[:,i])
 
                 score += mse_model / mse_baseline
@@ -753,6 +798,13 @@ def main():
             holdout_scores.append(score)
 
             print(f'SCORE: {score:.4f}')
+
+            # Directly make the test set predictions here
+            y_pred = trainer.predict(model=model, dataloaders=[test_loader])
+            y_pred = torch.cat(y_pred).detach().cpu().numpy().squeeze()
+            y_pred = y_pred.reshape((len(y_pred), len(args.selected_targets)))
+
+            y_preds.append(y_pred)
 
         # formatted output
         str_v = ''
@@ -770,7 +822,14 @@ def main():
 
     # procedures that take place in fit and in test stage
     # save predictions
-    # TODO save predictions y_pred in the required json format
+    y_preds = np.asarray(y_preds).mean(axis=0)
+
+    print('Test prediction shape', y_preds.shape)
+
+    submission = pd.DataFrame(data = y_preds, columns=args.selected_targets)
+    submission.to_csv("submission.csv", index_label="sample_index")
+
+
 
 if __name__=='__main__':
     main()

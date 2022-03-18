@@ -53,17 +53,32 @@ class RandomPixelSelector():
     """
     Randomly select pixels
 
-    Output sample shape: (CHANNELS_COUNT, 1, PIXELS)
+    Potential for augmentation (f_augment samples a n_pixels out of a field)
+
+    TODO potential for adding more quantities
+
+    Channel refers to wavelength channel
+
+    Output sample shape: (AUGMENT_COUNT, CHANNELS_COUNT, QUANTITY_COUNT, PIXELS)
     """
 
-    def __init__(self, n_pixels=32):
-        self.n_pixels = n_pixels
+    def __init__(self, n_pixels=32, f_augment=1):
+        self.n_pixels = n_pixels   # number of pixels per sample
+        self.f_augment = f_augment # augmentation factor
 
     def __call__(self, sample: np.ndarray):
         sample = sample.reshape((len(sample), -1))
-        ix = np.random.choice(range(len(sample[0])), self.n_pixels, replace=False)
+
+        # sample with replacement if pixels are not sufficient
+        replace = self.f_augment * self.n_pixels > len(sample[0])
+
+        ix = np.random.choice(range(len(sample[0])), self.n_pixels * self.f_augment, replace=replace)
         sample = sample[:, ix]
-        return sample.reshape((-1, 1, self.n_pixels))
+
+        sample = sample.reshape((-1, 1, self.f_augment, self.n_pixels))
+        sample = sample.swapaxes(0, 1)
+        sample = sample.swapaxes(2, 0)
+        return sample
 
 def relative_mse(y_true, y_pred, y_baseline):
     '''
