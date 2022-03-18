@@ -62,10 +62,30 @@ class HyperviewDataModule(pl.LightningDataModule):
             dataset = HyperviewDataset('train', self.args)
 
             # create a holdout dataset
-            self.train_data, self.holdout_data = random_split(dataset, [1600, 132])
+            nh = int( len(dataset.y) * self.args.f_holdout )
+            self.train_data, self.holdout_data = random_split(dataset, 
+                                                             [len(dataset.y) - nh, nh], 
+                                                             generator=torch.Generator().manual_seed(815))
 
             self.input_shapes = dataset.X.shape[1:]
             self.setup_folds()
+
+            y_train = self.train_data.dataset.y
+            y_holdout = self.train_data.dataset.y
+
+            train_indices = self.train_data.indices
+            holdout_indices = self.holdout_data.indices
+
+            y_train = y_train[train_indices].reshape(len(train_indices), len(self.args.selected_targets))
+            y_holdout = y_holdout[holdout_indices].reshape(len(holdout_indices), len(self.args.selected_targets))
+
+            y_train = y_train.cpu().numpy()
+            y_holdout = y_holdout.cpu().numpy()
+
+            print('\nOverall target label distribution')
+            for i, s in enumerate(self.args.selected_targets):
+                print(f'Train (all folds): {s:4s}  Mean = {np.mean(y_train[:, i]):.2f}, Std = {np.std(y_train[:, i]):.2f}')
+                print(f'Holdout:           {s:4s}  Mean = {np.mean(y_holdout[:, i]):.2f}, Std = {np.std(y_holdout[:, i]):.2f}')
 
         if stage in (None, 'test'):
             self.test_data = HyperviewDataset('test', self.args)
@@ -101,6 +121,23 @@ class HyperviewDataModule(pl.LightningDataModule):
         train_indices, valid_indices = self.splits[fold_index]
         self.train_fold = Subset(self.train_data, train_indices)
         self.valid_fold = Subset(self.train_data, valid_indices)
+
+        print(f'\nTarget label distribution in fold {fold_index}')
+        print('-'*40)
+        print('Train set mean / std')
+
+        y_train = self.train_data.dataset.y
+        y_valid = self.train_data.dataset.y
+
+        y_train = y_train[train_indices].reshape(len(train_indices), len(self.args.selected_targets))
+        y_valid = y_valid[valid_indices].reshape(len(valid_indices), len(self.args.selected_targets))
+
+        y_train = y_train.cpu().numpy()
+        y_valid = y_valid.cpu().numpy()
+
+        for i, s in enumerate(self.args.selected_targets):
+            print(f'Train: {s:4s}  Mean = {np.mean(y_train[:, i]):.2f}, Std = {np.std(y_train[:, i]):.2f}')
+            print(f'Valid: {s:4s}  Mean = {np.mean(y_valid[:, i]):.2f}, Std = {np.std(y_valid[:, i]):.2f}')
 
     @staticmethod
     def add_dataloader_specific_args(parent_parser):
@@ -300,6 +337,7 @@ class PseLTaeNet(pl.LightningModule):
         t = get_ntrainparams(self.temporal_encoder)
         c = get_ntrainparams(self.decoder)
 
+        print('\nPseLTae parameter information')
         print('TOTAL TRAINABLE PARAMETERS : {}'.format(total))
         print('RATIOS: Spatial {:5.1f}% , Temporal {:5.1f}% , Classifier {:5.1f}%'.format(s / total * 100,
                                                                                           t / total * 100,
@@ -422,11 +460,8 @@ class HyperviewNet(pl.LightningModule):
             return torch.optim.SGD(self.parameters(), lr=self.hparams.learning_rate)
 
     def configure_callbacks(self):
-        '''Model checkpoint callback goes here'''
-        callbacks = [ModelCheckpoint(monitor='valid_loss', mode='min',
-                     dirpath=os.path.join(os.path.dirname(self.backbone.args.save_model_path), 'checkpoint'),
-                     filename="hyperviewnet-{epoch}")]
-        return callbacks
+        '''Model checkpoint callback moved to k-fold loop'''
+        return []
 
     @staticmethod
     def activation_fn(activation_name):
@@ -452,7 +487,7 @@ class HyperviewNet(pl.LightningModule):
     @staticmethod
     def best_checkpoint_path(save_model_path, best_epoch, fold=1):
         '''Path to best checkpoint'''
-        ckpt_path = os.path.join(os.path.dirname(save_model_path), 'checkpoint', f"hyperviewnet-fold={fold}-epoch={best_epoch}.ckpt")
+        ckpt_path = os.path.join(os.path.dirname(save_model_path), 'checkpoint', f'fold-{fold}', f"hyperviewnet-epoch={best_epoch}.ckpt")
         all_ckpts = os.listdir(os.path.dirname(ckpt_path))
         # If the checkpoint already exists, lightning creates "*-v1.ckpt"
         only_ckpt = ~np.any([f'-v{best_epoch}' in ckpt for ckpt in all_ckpts])
@@ -535,6 +570,7 @@ def main():
     parser.add_argument('--selected-targets', type=str, nargs='+', choices=['P', 'K', 'Mg', 'pH'], default=['P', 'K', 'Mg', 'pH'], help='Selected regression targets')
     parser.add_argument('--data-processing', type=str, choices=['random-selection', 'spectral-curve'], default='random-selection')
     parser.add_argument('--c-norm', type=float, default=2000, help='Normalization constant')
+    parser.add_argument('--f-holdout', type=float, default=0.1, help='Fraction of data to use in holdout')
     # training
     parser.add_argument('--early-stopping', dest='early_stopping', action='store_true')
     parser.add_argument('--no-early-stopping', dest='early_stopping', action='store_false')
@@ -654,12 +690,21 @@ def main():
                 model = HyperviewNet(PseLTaeNet(args, cdm.input_shapes))
 
             # ----------
-            # training
+            # checkpoints
             # ----------
             callbacks = [HyperviewMetricCallbacks(args), ModelSummary(max_depth=-1)] # model checkpoint is a model callback
             if args.early_stopping:
                 callbacks.append(EarlyStopping(monitor='valid_loss', patience=args.patience, mode='min'))
 
+            checkpoint_callback = ModelCheckpoint(monitor='valid_loss', mode='min',
+                     dirpath=os.path.join(os.path.dirname(args.save_model_path), 'checkpoint', f'fold-{fold+1}'),
+                     filename="hyperviewnet-{epoch}")
+
+            callbacks.append(checkpoint_callback)
+
+            # ----------
+            # training
+            # ----------
             trainer = pl.Trainer.from_argparse_args(args, 
                                                 fast_dev_run=False, # debug option
                                                 logger=False,
@@ -670,14 +715,8 @@ def main():
 
             trainer.fit(model, cdm)
 
-            # TODO reset the model weights
-            # TODO reset the trainer?
-            # TODO predict on the holdout set
-            # TODO store the model to disk
-
             best_epoch = int(trainer.callback_metrics["best_epoch"])
-            ckpt_path = HyperviewNet.best_checkpoint_path(args.save_model_path, best_epoch, fold=fold)
-            trainer.save_checkpoint(ckpt_path) # TODO check if this applied early stopping ???
+            ckpt_path = os.path.join(trainer.checkpoint_callback.dirpath, f'hyperviewnet-epoch={best_epoch}.ckpt')
             print(f'\nLoading best model from {ckpt_path}')
             valid_dict = trainer.validate(dataloaders=valid_loader, ckpt_path=ckpt_path)[0]
             print(valid_dict)
@@ -708,7 +747,6 @@ def main():
                 print('   ', sv)
                 print(f'MSE (model): {mse_model:.2f}, MSE (baseline): {mse_baseline:.2f}')
                 print(f'Relative score: {100 * (mse_model - mse_baseline) / mse_baseline:.2f} %')
-                print('*'*40)
 
             score /= len(args.selected_targets)
 
@@ -720,8 +758,8 @@ def main():
         str_v = ''
         str_h = ''
         for vs, hs in zip(valid_scores, holdout_scores):
-            str_v += f'    {sv:.2f}'
-            str_h += f'    {sh:.2f}'
+            str_v += f'    {vs:.2f}'
+            str_h += f'    {hs:.2f}'
 
         print(f'\nReport after finishing {args.k_fold} folds')
         print('All valid set scores', str_v)
