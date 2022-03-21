@@ -102,7 +102,7 @@ class DenseNet:
 
         return outputs
 
-    def DenseNet121(self):
+    def DenseNet121(self,name='total'):
         inputs = tf.keras.Input((self.length, self.num_channel))  # The input tensor
         stem_block = stem(inputs, self.num_filters)  # The Stem Convolution Group
         Dense_Block_1 = dense_block(stem_block, self.num_filters * 2, 6, bottleneck=self.bottleneck)
@@ -114,11 +114,11 @@ class DenseNet:
         Dense_Block_4 = dense_block(Transition_Block_3, self.num_filters * 16, 16, bottleneck=self.bottleneck)
         outputs = self.MLP(Dense_Block_4)
         # Instantiate the Model
-        model = tf.keras.Model(inputs, outputs)
+        model = tf.keras.Model(inputs, outputs,name='total')
 
         return model
 
-    def DenseNet161(self):
+    def DenseNet161(self,name='total'):
         inputs = tf.keras.Input((self.length, self.num_channel))  # The input tensor
         stem_block = stem(inputs, self.num_filters)  # The Stem Convolution Group
         Dense_Block_1 = dense_block(stem_block, self.num_filters * 2, 6, bottleneck=self.bottleneck)
@@ -130,11 +130,11 @@ class DenseNet:
         Dense_Block_4 = dense_block(Transition_Block_3, self.num_filters * 16, 24, bottleneck=self.bottleneck)
         outputs = self.MLP(Dense_Block_4)
         # Instantiate the Model
-        model = tf.keras.Model(inputs, outputs)
+        model = tf.keras.Model(inputs, outputs,name='total')
 
         return model
 
-    def DenseNet169(self):
+    def DenseNet169(self,name='total'):
         inputs = tf.keras.Input((self.length, self.num_channel))  # The input tensor
         stem_block = stem(inputs, self.num_filters)  # The Stem Convolution Group
         Dense_Block_1 = dense_block(stem_block, self.num_filters * 2, 6, bottleneck=self.bottleneck)
@@ -146,11 +146,11 @@ class DenseNet:
         Dense_Block_4 = dense_block(Transition_Block_3, self.num_filters * 16, 32, bottleneck=self.bottleneck)
         outputs = self.MLP(Dense_Block_4)
         # Instantiate the Model
-        model = tf.keras.Model(inputs, outputs)
+        model = tf.keras.Model(inputs, outputs,name='total')
 
         return model
 
-    def DenseNet201(self):
+    def DenseNet201(self,name='total'):
         inputs = tf.keras.Input((self.length, self.num_channel))  # The input tensor
         stem_block = stem(inputs, self.num_filters)  # The Stem Convolution Group
         Dense_Block_1 = dense_block(stem_block, self.num_filters * 2, 6, bottleneck=self.bottleneck)
@@ -162,11 +162,11 @@ class DenseNet:
         Dense_Block_4 = dense_block(Transition_Block_3, self.num_filters * 16, 32, bottleneck=self.bottleneck)
         outputs = self.MLP(Dense_Block_4)
         # Instantiate the Model
-        model = tf.keras.Model(inputs, outputs)
+        model = tf.keras.Model(inputs, outputs,name='total')
 
         return model
 
-    def DenseNet264(self):
+    def DenseNet264(self,name='total'):
         inputs = tf.keras.Input((self.length, self.num_channel))  # The input tensor
         stem_block = stem(inputs, self.num_filters)  # The Stem Convolution Group
         Dense_Block_1 = dense_block(stem_block, self.num_filters * 2, 6, bottleneck=self.bottleneck)
@@ -178,6 +178,6 @@ class DenseNet:
         Dense_Block_4 = dense_block(Transition_Block_3, self.num_filters * 16, 48, bottleneck=self.bottleneck)
         outputs = self.MLP(Dense_Block_4)
         # Instantiate the Model
-        model = tf.keras.Model(inputs, outputs)
+        model = tf.keras.Model(inputs, outputs,name='total')
 
         return model

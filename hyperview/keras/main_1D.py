@@ -22,11 +22,11 @@ parser = argparse.ArgumentParser(description='HyperView')
 parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('-c', '--channel-type', default=1, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
-parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
+parser.add_argument('--num-epochs', default=30, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=4, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=32, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-w','--width', default=64, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
-parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
+parser.add_argument('-l','--learning-rate', default=0.001, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate the model (it requires the wights path to be given')
@@ -48,22 +48,22 @@ def main():
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
     image_shape = (args.width, args.width)
-    agg=False
-    if args.channel_type==2:
-        agg=True
 
     dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
                             valid_size=0.24,
-                            agg=agg,
+                            channel_type=args.channel_type,
                             batch_size=args.batch_size)
 
+    experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.channel_type,
+                                                                     args.batch_size, args.num_epochs,
+                                                                     args.learning_rate, args.pretrained, args.width)
 
 
-    experiment_log = '{}/m_{}_c_{}_b_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type,args.channel_type, args.batch_size, args.learning_rate, args.pretrained,args.width)
     model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
-    model=train_model(model, dataset, experiment_log, warmup=True)
-    model=train_model(model, dataset, experiment_log, warmup=False)
-    model.load_weights('{}_model_best.tf'.format(experiment_log))
+    train_model(model, dataset, experiment_log, warmup=True)
+    model.load_weights('{}_model_best.h5'.format(experiment_log))
+    train_model(model, dataset, experiment_log, warmup=False)
+    model.load_weights('{}_model_best.h5'.format(experiment_log))
     evaluate_model(model, dataset)
     create_submission(model, dataset.eval_reader,experiment_log)
 
@@ -112,15 +112,15 @@ def train_model(model, dataset, log_args, warmup=True):
         # lossWeights = {"total": 1, "P": 0 / 1100, "K": 0 / 2500, "Mg": 0 / 2000, "pH": 0 / 3}
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
-        lossWeights = {"total": 0, "P": 0.25 , "K": 0.25 , "Mg": 0.25 , "pH": 0.25 }
+        lossWeights = {"total": 1000, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 0 }
         model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
                 ReduceLROnPlateau(verbose=1),
                 EarlyStopping(patience=25),
                 ModelCheckpoint(#update_weights=True,
-                    filepath='{}_model_best.tf'.format(log_args),
-                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=False),
+                    filepath='{}_model_best.h5'.format(log_args),
+                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True),
                 ]
 
         history = model.fit(dataset.train_reader,
@@ -142,7 +142,7 @@ def train_model(model, dataset, log_args, warmup=True):
         loss_log = '{}_pH_loss.jpg'.format(log_args)
         print_history(history, 'pH_loss', loss_log)
 
-        return model
+        #return model
 
 def evaluate_model(model, generators, logging=True):
 
@@ -183,7 +183,7 @@ def create_submission(model, reader,log_args):
             predictions=np.concatenate((predictions,y_pred),axis=0)
             files=np.concatenate((files,file_name.numpy()))
 
-    predictions = predictions * np.array([325.0, 625.0, 400.0, 7.8])
+    predictions = predictions #* np.array([325.0, 625.0, 400.0, 7.8])
     sample_index = np.expand_dims(np.array([int(os.path.basename(f.decode('utf-8')).replace(".npz", "")) for f in files]),1)
     predictions = np.concatenate((sample_index, predictions), axis=1)
 
@@ -196,7 +196,7 @@ def create_submission(model, reader,log_args):
 def challenge_eval(model, reader):
     predictions = []
     ground_truth = []
-    y_base = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
+    y_base = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) # /np.array([325.0, 625.0, 400.0, 7.8])
     for X, Y  in reader:
 
         y_pred = model.predict(X)
@@ -233,7 +233,7 @@ def print_history(history, type, file_name):
 
 
 def custom_mse(idx=None):
-    y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
+    y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) #/np.array([325.0, 625.0, 400.0, 7.8])
     @tf.function
     def mse_1(y_true,y_pred):
         y_base = tf.constant(y_base_fact, dtype=tf.float32)

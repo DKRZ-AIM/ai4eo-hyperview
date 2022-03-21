@@ -8,7 +8,7 @@ from math import floor,ceil
 import numpy as np
 from tqdm.auto import tqdm
 import csv
-from model_selector_2D import SpatioMultiChannellModel
+from model_selector_2D import get_gan_model
 import matplotlib.pyplot as plt
 import keras.backend as K
 import pandas as pd
@@ -19,12 +19,12 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=8, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
-parser.add_argument('-c', '--channel-type', default=4, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-c', '--channel-type', default=2, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
-parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
+parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=1, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-b','--batch-size', default=4, type=int, metavar='BS', help='number of batch size (default: 32)')
 parser.add_argument('-w','--width', default=32, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
@@ -53,13 +53,13 @@ def main():
                             image_shape=image_shape,
                             batch_size=args.batch_size)
 
-    experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.channel_type,
-                                                                     args.batch_size, args.num_epochs,
-                                                                     args.learning_rate, args.pretrained, args.width)
 
 
-    model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
+    experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type,args.channel_type, args.batch_size,args.num_epochs, args.learning_rate, args.pretrained,args.width)
+    model = get_gan_model(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
+    #model.build(tuple((None, *dataset.image_shape)))
     train_model(model, dataset, experiment_log, warmup=True)
+    model = get_gan_model(args.model_type, args.channel_type, dataset.image_shape, dataset.label_shape,pretrained=args.pretrained)
     model.load_weights('{}_model_best.h5'.format(experiment_log))
     train_model(model, dataset, experiment_log, warmup=False)
     model.load_weights('{}_model_best.h5'.format(experiment_log))
@@ -98,21 +98,22 @@ def train_model(model, dataset, log_args, warmup=True):
         #                                  step_size=250
         #                                  )
 
-        optimizer = Adam(learning_rate=learning_rate)
-        #moving_avg_optimizer = tfa.optimizers.SWA(optimizer)
+
+        gen_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, beta_1=0.5)
+        disc_optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate, beta_1=0.5)
 
 
         mse_total = custom_mse()
-        mse0 = custom_mse(idx=0)
-        mse1 = custom_mse(idx=1)
-        mse2 = custom_mse(idx=2)
-        mse3 = custom_mse(idx=3)
-        # mse = tf.keras.losses.MeanSquaredError(reduction = tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
-        # lossWeights = {"total": 1, "P": 0 / 1100, "K": 0 / 2500, "Mg": 0 / 2000, "pH": 0 / 3}
 
-        losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
-        lossWeights = {"total": 0, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 1 }
-        model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
+        gen_loss = generator_loss
+        disc_loss = discriminator_loss
+        metric = mse_total
+
+        model.compile(gen_optimizer, disc_optimizer, gen_loss, disc_loss, metric, args.batch_size, run_eagerly=False)
+
+        #losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
+        #lossWeights = {"total": 0, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 1 }
+        #model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
                 ReduceLROnPlateau(verbose=1, patience=6),
@@ -131,7 +132,7 @@ def train_model(model, dataset, log_args, warmup=True):
                                 validation_data=dataset.valid_reader)
 
         loss_log = '{}_total_loss.jpg'.format(log_args)
-        print_history(history, 'loss', loss_log)
+        print_history(history, 'reg_loss', loss_log)
         loss_log = '{}_P_loss.jpg'.format(log_args)
         print_history(history, 'P_loss', loss_log)
         loss_log = '{}_K_loss.jpg'.format(log_args)
@@ -142,6 +143,31 @@ def train_model(model, dataset, log_args, warmup=True):
         print_history(history, 'pH_loss', loss_log)
 
         #return model
+
+def generator_loss(disc_generated_output, gen_output, target,batch_size):
+    LAMBDA = 100
+    loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False,reduction=tf.keras.losses.Reduction.NONE)
+    gan_loss = tf.reduce_sum(loss_object(tf.ones_like(disc_generated_output), disc_generated_output)) *(1. / batch_size)
+
+    # Mean absolute error
+    y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) / np.array([325.0, 625.0, 400.0, 7.8])
+    y_base = tf.constant(y_base_fact, dtype=tf.float32)
+    loss_raw = K.mean(K.square(target - gen_output), 0)
+    loss_base = K.mean(K.square(target - y_base), 0)
+    loss = tf.math.divide(loss_raw, loss_base)
+
+    total_gen_loss = gan_loss + (LAMBDA * loss)
+
+    return total_gen_loss, gan_loss, loss
+
+
+def discriminator_loss(disc_real_output, disc_generated_output,batch_size):
+
+    loss_object = tf.keras.losses.BinaryCrossentropy(from_logits=False,reduction=tf.keras.losses.Reduction.NONE)
+    real_loss = tf.reduce_sum(loss_object(tf.ones_like(disc_real_output), disc_real_output)) * (1. / batch_size)
+    generated_loss = loss_object(tf.zeros_like(disc_generated_output), disc_generated_output)
+    total_disc_loss = real_loss + generated_loss
+    return total_disc_loss
 
 def evaluate_model(model, generators, logging=True):
 
@@ -234,12 +260,14 @@ def print_history(history, type, file_name):
 
 def custom_mse(idx=None):
     y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
-    @tf.function
-    def mse_1(y_true,y_pred):
+    #@tf.function
+    def mse_1(y_pred,y_true,idx=None):
         y_base = tf.constant(y_base_fact, dtype=tf.float32)
         if idx is not None:
+
             y_true=y_true[:,idx]
             y_base = y_base[idx]
+            y_pred = y_pred[:,idx]
 
         loss_raw = K.mean(K.square(y_true - y_pred), 0)
         loss_base = K.mean(K.square(y_true - y_base), 0)

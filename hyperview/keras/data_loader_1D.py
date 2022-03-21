@@ -12,7 +12,7 @@ from sklearn import preprocessing
 
 
 class DataGenerator():
-    def __init__(self,train_dir, label_dir, eval_dir,valid_size=0.2,agg=True, batch_size=16):
+    def __init__(self,train_dir, label_dir, eval_dir,valid_size=0.2,channel_type=0, batch_size=16):
         """Constructor.
                 """
         self.train_dir=train_dir
@@ -41,10 +41,10 @@ class DataGenerator():
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
-        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,True,agg=agg,stats=self.train_stats)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, True,agg=agg,stats=self.train_stats)
-        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, False,agg=agg,stats=self.eval_stats)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, False,agg=agg,eval=True,stats=self.eval_stats)
+        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,True,channel_type=channel_type,stats=self.train_stats)
+        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, True,channel_type=channel_type,stats=self.train_stats)
+        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, False,channel_type=channel_type,stats=self.eval_stats)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, False,channel_type=channel_type,eval=True,stats=self.eval_stats)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -52,15 +52,15 @@ class DataGenerator():
     @staticmethod
     def _get_dataset_features(reader):
         for feature, mask, in reader.take(1):
-            image_shape=tuple([feature.shape[-2],feature.shape[-1]])
+            image_shape=tuple([*feature.shape[1:]])
             label_shape=mask.shape[-1]
             return image_shape,label_shape,
 
     @staticmethod
-    def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None,agg=True):
+    def _get_data_reader(files, labels, batch_size, transform, eval=False,stats=None,channel_type=0):
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,stats,agg),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,stats,channel_type),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
         if not eval:
             dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval),num_parallel_calls=tf.data.AUTOTUNE)
@@ -82,7 +82,7 @@ class DataGenerator():
             [type]: 2D numpy array with soil properties levels
         """
         gt_file = pd.read_csv(file_path)
-        labels = gt_file[["P", "K", "Mg", "pH"]].values / np.array([325,625,400,7.8])
+        labels = gt_file[["P", "K", "Mg", "pH"]].values #/ np.array([325,625,400,7.8])
         return labels
 
     @staticmethod
@@ -104,33 +104,91 @@ class DataGenerator():
                       'constant', constant_values=0)
 
     @staticmethod
-    def _deparse_single_image(filename,label,stats=None,agg=True):
-        #filtering = SpectralCurveFiltering()
+    def _deparse_single_image(filename,label,stats=None,channel_type=0):
+        filtering = SpectralCurveFiltering()
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
 
+                print(np.max(stats[2])*np.max(stats[0]))
                 PAD_CONST_1 = 6715800
                 PAD_CONST_2 = int(1228800)
                 data=npz['data']/np.max(stats[-1])
                 mask = npz['mask']
                 data = np.ma.MaskedArray(data,mask)
 
-                #arr=filtering(data)
-                if agg:
-                    arr = np.ma.mean(data,axis=(1,2))
+
+                if channel_type==1:
+                    arr = filtering(data)
+                    arr= arr/ np.linalg.norm(arr)
+                    #arr = np.ma.mean(data,axis=(1,2))
                     var = np.ma.var(data,(1,2))
+                    var = var / np.linalg.norm(var)
 
                     dXdl = np.gradient(arr, axis=0)
+                    #dXdl = dXdl / np.linalg.norm(dXdl)
+
                     d2Xdl2 = np.gradient(dXdl, axis=0)
-                    q1 = np.percentile(data, 25, axis=(1, 2))
-                    q2 = np.percentile(data, 50, axis=(1, 2))
-                    q3 = np.percentile(data, 75, axis=(1, 2))
+                    #d2Xdl2 = d2Xdl2 / np.linalg.norm(d2Xdl2)
+
+                    #q1 = np.percentile(data, 25, axis=(1, 2))
+                    #q1 = q1 / np.linalg.norm(q1)
+
+                    #q2 = np.percentile(data, 50, axis=(1, 2))
+                    #q2 = q2 / np.linalg.norm(q2)
+
+                    #q3 = np.percentile(data, 75, axis=(1, 2))
+                    #q3 = q3 / np.linalg.norm(q3)
+
                     fft = np.fft.fft(arr)
                     real=np.real(fft)
+                    #real = real / np.linalg.norm(real)
                     imag=np.imag(fft)
+                    #imag = imag / np.linalg.norm(imag)
 
-                    return np.concatenate([arr,var,q1,q2,q3,dXdl,d2Xdl2,real,imag],-1)
-                else:
+                    arr=np.expand_dims(arr,1)
+
+                    var = np.expand_dims(var,1)
+                    #q1 = np.expand_dims(q1,1)
+                    #q2 = np.expand_dims(q2,1)
+                    #q3 = np.expand_dims(q3,1)
+                    dXdl = np.expand_dims(dXdl,1)
+                    d2Xdl2 = np.expand_dims(d2Xdl2,1)
+                    real = np.expand_dims(real,1)
+                    imag = np.expand_dims(imag,1)
+                    out=np.concatenate([arr,var,dXdl,d2Xdl2,real,imag],1)
+
+                    return out
+                elif channel_type==3:
+                    data = data.flatten('F')
+                    data = data[~data.mask]
+                    idx = np.random.randint(int(len(data)/150), size=128)
+                    data_list=[]
+                    for id in idx:
+                        da=data[id*150:id*150+150]
+                        dXdl = np.gradient(da, axis=0)
+                        dXdl2 = np.gradient(dXdl, axis=0)
+                        fft = np.fft.fft(da)
+                        real = np.real(fft)
+                        imag = np.imag(fft)
+
+                        da=np.expand_dims(da,1)
+                        dXdl = np.expand_dims(dXdl, 1)
+                        dXdl2 = np.expand_dims(dXdl2, 1)
+                        real = np.expand_dims(real, 1)
+                        imag = np.expand_dims(imag, 1)
+
+                        data_list.append(da)
+                        data_list.append(dXdl)
+                        data_list.append(dXdl2)
+                        data_list.append(real)
+                        data_list.append(imag)
+                        #TODO this can be reimplemented for 2D image reading
+
+                    out=np.concatenate(data_list,1)
+
+                    return out
+
+                elif channel_type==2:
                     #data = data / stats[-1]
                     data = data.flatten('F')
                     data = data[~data.mask]
@@ -144,7 +202,7 @@ class DataGenerator():
                             data=data[shift:shift+PAD_CONST_2]
                         else:
                             data = data[:PAD_CONST_2]
-                    #pde = pde.T
+                #    #pde = pde.T
                     return data
         [image ] = tf.py_function(_read_npz, [filename], [tf.float32])
 
@@ -155,13 +213,12 @@ class DataGenerator():
         def _aug_fn(feature):
 
             if not eval:
-                sample = np.random.uniform(low=-0.01, high=0.01, size=feature.shape)
+                sample = np.random.uniform(low=-0.0001, high=0.0001, size=feature.shape)
                 feature=feature + sample
 
             #feature=feature.transpose((2, 0, 1))
             #feature = np.nan_to_num(feature, nan=np.finfo(float).eps, posinf=np.finfo(float).eps, neginf=-np.finfo(float).eps)
             feature = tf.cast(feature, tf.float32)
-
             return feature
         if transform is not None:
             feature = tf.numpy_function(func=_aug_fn, inp=[feature], Tout=[tf.float32])
