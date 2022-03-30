@@ -19,7 +19,7 @@ import torch
 import pytorch_lightning as pl
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset, Subset, random_split
+from torch.utils.data import DataLoader, Dataset, Subset, random_split, SubsetRandomSampler
 
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback
@@ -84,7 +84,7 @@ class HyperviewDataModule(pl.LightningDataModule):
             self.holdout_data = Subset(dataset, holdo_idcs)
 
             self.input_shapes = dataset.X.shape[1:]
-            self.setup_folds()
+            self.setup_folds(train_ufids)
 
             y_train = self.train_data.dataset.y
             y_holdout = self.train_data.dataset.y
@@ -111,12 +111,14 @@ class HyperviewDataModule(pl.LightningDataModule):
 
 
     def train_dataloader(self):
-        return DataLoader(self.train_fold, batch_size=self.args.batch_size, 
-                          num_workers=self.args.num_workers, shuffle=True, drop_last=True)
+        return DataLoader(self.train_data, batch_size=self.args.batch_size, 
+                          sampler=self.train_subsampler,
+                          num_workers=self.args.num_workers, drop_last=True)
 
     def val_dataloader(self):
-        return DataLoader(self.valid_fold, batch_size=self.args.test_batch_size, 
-                          num_workers=self.args.num_workers, shuffle=False, drop_last=False)
+        return DataLoader(self.train_data, batch_size=self.args.test_batch_size, 
+                          sampler=self.valid_subsampler,
+                          num_workers=self.args.num_workers, drop_last=False)
 
     def holdout_dataloader(self):
         return DataLoader(self.holdout_data, batch_size=self.args.test_batch_size, 
@@ -134,16 +136,35 @@ class HyperviewDataModule(pl.LightningDataModule):
         ''' overwrite parent method '''
         pass
 
-    def setup_folds(self):
+    def setup_folds(self, ufids):
         ''' Set up splits for k-fold cross validation '''
         kfold = KFold(self.args.k_fold, shuffle=True, random_state=761)
-        self.splits = [split for split in kfold.split(range(len(self.train_data)))]
+        
+        self.splits = [split for split in kfold.split(ufids)]
 
     def setup_fold_index(self, fold_index: int):
         ''' Select split for cross validation '''
-        train_indices, valid_indices = self.splits[fold_index]
-        self.train_fold = Subset(self.train_data, train_indices)
-        self.valid_fold = Subset(self.train_data, valid_indices)
+        train_ufids, valid_ufids = self.splits[fold_index]
+
+        print('Unique field IDs in train', len(train_ufids))
+        print('Unique field IDs in valid', len(valid_ufids))
+
+        field_ids = self.train_data.dataset.field_ids
+        train_indices = []
+        valid_indices = []
+
+        for ufi in train_ufids:
+            train_indices.extend(np.where(field_ids == ufi)[0])
+
+        for ufi in valid_ufids:
+            valid_indices.extend(np.where(field_ids == ufi)[0])
+
+        print('Samples in train', len(train_indices))
+        print('Samples in valid', len(valid_indices))
+
+        np.random.shuffle(train_indices)
+        self.train_subsampler = SubsetRandomSampler(train_indices)
+        self.valid_subsampler = SubsetRandomSampler(valid_indices)
 
         print(f'\nTarget label distribution in fold {fold_index}')
         print('-'*40)
@@ -255,8 +276,8 @@ class HyperviewDataset(Dataset):
         data = data.reshape( old_shape[0] * old_shape[1], old_shape[2], old_shape[3], old_shape[4] )
 
         self.X = torch.tensor(data, dtype=torch.float32)
-        self.field_ids = np.array(field_ids)
-        self.unique_field_ids = np.unique(self.field_ids)
+        self.field_ids = np.array(field_ids).astype(int)
+        self.unique_field_ids = np.unique(self.field_ids).astype(int)
 
         print(f'Finished loading data in {time.time() - start_time:.0f} seconds')
         print('*'*40 + '\n')
