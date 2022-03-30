@@ -131,7 +131,7 @@ class DataGenerator():
     def _trans_single_image(feature,label,filename,transform=None,eval=True,stats=None):
         def _aug_fn(image):
 
-            image = image / np.max(stats[-1])  # MAX
+            #image = image / np.max(stats[-1])  # MAX
             augmented = transform(image=image)
             feature = augmented['image']
             #feature=feature.transpose((2, 0, 1))
