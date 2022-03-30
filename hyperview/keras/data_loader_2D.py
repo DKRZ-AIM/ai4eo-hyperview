@@ -111,7 +111,7 @@ class DataGenerator():
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
                 image = npz['data']
-                mask = 2*(1 - npz['mask'].astype(int))-1
+                mask = (1 - npz['mask'].astype(int))
                 image = (image * mask)
 
                 max_edge = np.max(image.shape[1:])
