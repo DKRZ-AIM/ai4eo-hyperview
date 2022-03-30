@@ -30,6 +30,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
             fet_out=SpatioMultiChannellModel._multi_channel_builder_4(model_type, pretrained, label_shape,temporal_input)
         elif channel_type==5:
             fet_out=SpatioMultiChannellModel._multi_channel_builder_5(model_type, pretrained, label_shape,temporal_input)
+        elif channel_type==6:
+            fet_out=SpatioMultiChannellModel._multi_channel_builder_6(model_type, pretrained, label_shape,temporal_input)
 
 
         #input_layer = Input(shape=(16,))
@@ -168,9 +170,45 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         return out
 
+    @staticmethod
+    def _multi_channel_builder_6(model_type, pretrained, label_shape, temporal_input):
+
+        input = tf.squeeze(temporal_input, -4)
+        multi_chanel_model = tf.keras.Sequential()
+        multi_chanel_model(Channel_attention())
+        #multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1, 1), activation='relu'))
+        con1 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
+        con2 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
+        con3 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
+        con4 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
+
+        out = multi_chanel_model(input)
+        out1 = con1(out)
+        out2 = con2(out)
+        out3 = con3(out)
+        out4 = con4(out)
+
+        backbone1 = BackboneModel(model_type, out1.shape[1:], pretrained,1)
+        backbone2 = BackboneModel(model_type, out2.shape[1:], pretrained,1)
+        backbone3 = BackboneModel(model_type, out3.shape[1:], pretrained,1)
+        backbone4 = BackboneModel(model_type, out4.shape[1:], pretrained,1)
+
+        out1 = backbone1(out1)
+        out2 = backbone2(out2)
+        out3 = backbone3(out3)
+        out4 = backbone4(out4)
+
+        out = tf.concat([out1,out2,out3,out4], axis=-1)
+
+
+
+        out = Layer(name='total')(out)
+
+        return out
+
 
 class BackboneModel(tf.keras.Model):
-        def __init__(self, model_type, input_shape,pretrained):
+        def __init__(self, model_type, input_shape,pretrained,out_shape=4):
 
             inp = tf.keras.layers.Input(shape=input_shape)
             model=None
@@ -225,7 +263,7 @@ class BackboneModel(tf.keras.Model):
             single_channel_header = tf.keras.Sequential()
             #single_channel_header.add(GlobalAvgPool2D())
             single_channel_header.add(Flatten())
-            single_channel_header.add(Dense(4, activation='sigmoid'))
+            single_channel_header.add(Dense(out_shape, activation='sigmoid'))
             #single_channel_header.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
             #single_channel_header.add(Dropout(0.25))
             #single_channel_header.add(BatchNormalization())

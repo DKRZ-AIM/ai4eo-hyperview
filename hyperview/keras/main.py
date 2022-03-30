@@ -19,8 +19,8 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=0, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
-parser.add_argument('-c', '--channel-type', default=5, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=3, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-c', '--channel-type', default=6, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
