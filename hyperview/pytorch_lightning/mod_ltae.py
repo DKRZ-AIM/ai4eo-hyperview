@@ -65,7 +65,7 @@ class LTAE(nn.Module):
         self.attention_heads = MultiHeadAttention(
             n_head=n_head, d_k=d_k, d_in=self.d_model)
 
-        assert (self.n_neurons[0] == self.d_model)
+        assert (self.n_neurons[0] == self.d_model), print(self.n_neurons[0])
 
         activation = nn.ReLU()
 

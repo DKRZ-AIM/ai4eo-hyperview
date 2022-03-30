@@ -83,7 +83,7 @@ class HyperviewDataModule(pl.LightningDataModule):
             self.train_data   = Subset(dataset, train_idcs)
             self.holdout_data = Subset(dataset, holdo_idcs)
 
-            self.input_shapes = dataset.X.shape[1:]
+            self.input_shapes = dataset.X.shape[2] # need channel count
             self.setup_folds(train_ufids)
 
             y_train = self.train_data.dataset.y
@@ -256,10 +256,16 @@ class HyperviewDataset(Dataset):
                 key=lambda x: int(os.path.basename(x).replace(".npz", "")),
             )
         )
+
+        is_replace = []
         for file_name in all_files:
             with np.load(file_name) as npz:
                 arr = np.ma.MaskedArray(**npz)
             arr = filtering(arr)
+            if len(arr)==2:
+                rep = arr[1]
+                is_replace.append(rep)
+                arr = arr[0]
             data.append(arr)
 
             field_id = os.path.basename(file_name.replace(".npz", ""))
@@ -269,15 +275,45 @@ class HyperviewDataset(Dataset):
             else:
                 field_ids.extend( [field_id] * self.args.f_augment )
 
-        data = np.array(data) / self.args.c_norm
-        print(f'Maximum value after normalization: {np.max(data)}')
-
+        data = np.array(data)
         old_shape = data.shape
         data = data.reshape( old_shape[0] * old_shape[1], old_shape[2], old_shape[3], old_shape[4] )
+
+        # evaluate replace statements
+        if len(is_replace) > 0:
+            ii, cc = np.unique(np.array(is_replace), return_counts=True)
+            print('Fields with resampled pixels:', ii, cc)
+
+        vanilla_data = copy.deepcopy(data)
+
+        if self.args.c_gradient:
+            print('-- adding channel: gradient')
+            grad = np.gradient(vanilla_data, axis=1)
+            data = np.concatenate([vanilla_data, grad], axis=2)
+        if self.args.c_curvature:
+            print('-- adding channel: curvature')
+            curv = np.gradient(grad, axis=1)
+            data = np.concatenate([data, curv], axis=2)
+        if self.args.c_fft:
+            print('-- adding channel: fft (real)')
+            print('-- adding channel: fft (imag)')
+            cfft = np.fft.fft(vanilla_data, axis=1)
+            cfft_r = cfft.real
+            cfft_i = cfft.imag
+            data = np.concatenate([data, cfft_r, cfft_i], axis=2)
 
         self.X = torch.tensor(data, dtype=torch.float32)
         self.field_ids = np.array(field_ids).astype(int)
         self.unique_field_ids = np.unique(self.field_ids).astype(int)
+
+        if self.args.c_norm:
+            dmax = np.max(data, axis=(0, 1, 3))
+            data = np.array(data) / dmax[np.newaxis, np.newaxis, :, np.newaxis]
+            print(f'Maximum value after normalization: {np.max(data, axis=(0, 1, 3))}')
+            print(f'Minimum value after normalization: {np.min(data, axis=(0, 1, 3))}')
+        else:
+            print(f'Maximum value WITHOUT normalization: {np.max(data, axis=(0, 1, 3))}')
+            print(f'Minimum value WITHOUT normalization: {np.min(data, axis=(0, 1, 3))}')
 
         print(f'Finished loading data in {time.time() - start_time:.0f} seconds')
         print('*'*40 + '\n')
@@ -356,7 +392,7 @@ class PseLTaeNet(pl.LightningModule):
         self.activation = HyperviewNet.activation_fn(self.args.activation)
         self.loss = HyperviewNet.loss_fn(args.loss)
 
-        self.spatial_encoder = PixelSetEncoder(1, # TODO check -- only 1 "channel" hereinput_shapes, 
+        self.spatial_encoder = PixelSetEncoder(input_shapes, # TODO check -- only 1 "channel" hereinput_shapes, 
                                                mlp1=args.mlp1, 
                                                pooling=args.pooling, 
                                                mlp2=args.mlp2, 
@@ -368,8 +404,7 @@ class PseLTaeNet(pl.LightningModule):
                                      d_k=args.d_k,
                                      d_model=args.d_model, 
                                      n_neurons=args.mlp3, 
-                                     dropout=args.
-                                     dropout,
+                                     dropout=args.dropout,
                                      T=args.T, 
                                      len_max_seq=args.len_max_seq, 
                                      positions=args.positions, 
@@ -454,7 +489,7 @@ class PseLTaeNet(pl.LightningModule):
         parser.add_argument('--n-head', type=int, default=16)
         parser.add_argument('--d-k', type=int, default=8)
         parser.add_argument('--d-model', type=int, default=256)
-        parser.add_argument('--dropout', type=int, default=0.2)
+        parser.add_argument('--dropout', type=float, default=0.2)
         parser.add_argument('--T', type=int, default=1000)
         parser.add_argument('--len-max-seq', type=int, default=150)
         parser.add_argument('--positions', type=int, default=None)
@@ -462,6 +497,9 @@ class PseLTaeNet(pl.LightningModule):
         # releated to pseltae data
         parser.add_argument('--n-pixels', type=int, default=32, help='Random pixels to select if --data-processing = random-selection')
         parser.add_argument('--f-augment', type=int, default=1, help='Data augmentation factor')
+        parser.add_argument('--c-gradient', action='store_true', help='Include channel d X / d lambda')
+        parser.add_argument('--c-curvature', action='store_true', help='Include channel d2 X / d lambda2')
+        parser.add_argument('--c-fft', action='store_true', help='Include channel FFT(X).REAL and FFT(X).IMAG')
         return parser
 
 class HyperviewNet(pl.LightningModule):
@@ -648,13 +686,13 @@ def main():
     parser.add_argument('--data', type=str, help='should enlist train_data.h5, valid_data.h5, (test_data.h5)')
     parser.add_argument('--selected-targets', type=str, nargs='+', choices=['P', 'K', 'Mg', 'pH'], default=['P', 'K', 'Mg', 'pH'], help='Selected regression targets')
     parser.add_argument('--data-processing', type=str, choices=['random-selection', 'spectral-curve'], default='random-selection')
-    parser.add_argument('--c-norm', type=float, default=2000, help='Normalization constant')
+    parser.add_argument('--c-norm', action='store_true', help='Apply channel wise max normalization')
     parser.add_argument('--f-holdout', type=float, default=0.1, help='Fraction of data to use in holdout')
     # training
     parser.add_argument('--early-stopping', dest='early_stopping', action='store_true')
     parser.add_argument('--no-early-stopping', dest='early_stopping', action='store_false')
     parser.set_defaults(early_stopping=True)
-    parser.add_argument('--patience', type=int, default=3, 
+    parser.add_argument('--patience', type=int, default=6, 
                          help='Epochs to wait before early stopping')
     parser.add_argument('-v', '--verbose', action='store_true')
     parser.add_argument('--nni', action='store_true')

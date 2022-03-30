@@ -78,7 +78,7 @@ class RandomPixelSelector():
         sample = sample.reshape((-1, 1, self.f_augment, self.n_pixels))
         sample = sample.swapaxes(0, 1)
         sample = sample.swapaxes(2, 0)
-        return sample
+        return sample, replace
 
 def relative_mse(y_true, y_pred, y_baseline):
     '''
