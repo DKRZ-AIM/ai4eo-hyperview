@@ -111,7 +111,7 @@ def train_model(model, dataset, log_args, warmup=True):
         # lossWeights = {"total": 1, "P": 0 / 1100, "K": 0 / 2500, "Mg": 0 / 2000, "pH": 0 / 3}
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
-        lossWeights = {"total": 0, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 1 }
+        lossWeights = {"total": 1, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 0 }
         model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
