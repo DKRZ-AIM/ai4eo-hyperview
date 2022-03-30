@@ -28,6 +28,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
             fet_out = SpatioMultiChannellModel._multi_channel_builder_3(model_type, pretrained, label_shape,temporal_input)
         elif channel_type==4:
             fet_out=SpatioMultiChannellModel._multi_channel_builder_4(model_type, pretrained, label_shape,temporal_input)
+        elif channel_type==5:
+            fet_out=SpatioMultiChannellModel._multi_channel_builder_5(model_type, pretrained, label_shape,temporal_input)
 
 
         #input_layer = Input(shape=(16,))
@@ -149,6 +151,23 @@ class SpatioMultiChannellModel(tf.keras.Model):
         model=ThreeDCNN(inp,label_shape)
         return model(inp)
 
+    @staticmethod
+    def _multi_channel_builder_5(model_type, pretrained, label_shape, temporal_input):
+
+        input = tf.squeeze(temporal_input, -4)
+        multi_chanel_model = tf.keras.Sequential()
+        multi_chanel_model(Channel_attention())
+        multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1,1), activation='relu'))
+
+        out = multi_chanel_model(input)
+
+        backbone = BackboneModel(model_type, out.shape[1:], pretrained)
+
+        out=backbone(out)
+        out=Layer(name='total')(out)
+
+        return out
+
 
 class BackboneModel(tf.keras.Model):
         def __init__(self, model_type, input_shape,pretrained):
@@ -161,38 +180,38 @@ class BackboneModel(tf.keras.Model):
 
             if model_type == 1:
                 if weights=='imagenet':
-                    weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_small_224_1.0_float.h5')
+                    weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_small_224_1.0_float_no_top_v2.h5')
                 model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
 
             if model_type == 2:
                 if weights=='imagenet':
-                    weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_large_224_1.0_float.h5')
+                    weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_large_224_1.0_float_no_top_v2.h5')
                 model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 3:
                 if weights=='imagenet':
-                    weights=os.path.join(os.getcwd(), 'models/efficientnetv2-s.h5')
+                    weights=os.path.join(os.getcwd(), 'models/efficientnetv2-s_notop.h5')
                 model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 4:
-                if weights=='imagenet':
-                    weights=os.path.join(os.getcwd(), 'models/evgg19_weights_tf_dim_ordering_tf_kernels.h5')
+                #if weights=='imagenet':
+                    #weights=os.path.join(os.getcwd(), 'models/evgg19_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 5:
-                if weights=='imagenet':
-                    weights=os.path.join(os.getcwd(), 'models/xception_weights_tf_dim_ordering_tf_kernels.h5')
+                #if weights=='imagenet':
+                    #weights=os.path.join(os.getcwd(), 'models/xception_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.Xception(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
             if model_type == 6:
-                if weights=='imagenet':
-                    weights=os.path.join(os.getcwd(), 'models/resnet50v2_weights_tf_dim_ordering_tf_kernels.h5')
+                #if weights=='imagenet':
+                    #weights=os.path.join(os.getcwd(), 'models/resnet50v2_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
@@ -438,3 +457,143 @@ class DiscriminatorModel(tf.keras.Model):
             d = Dense(1,activation='sigmoid')(d)
 
             super(DiscriminatorModel, self).__init__(inputs=[in_src_image, in_label], outputs=d)
+
+
+# !/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+Created on Feb 03, 2021 
+@file: DANet_attention3D.py
+@desc: Dual attention network.
+@author: laugh12321
+@contact: laugh12321@vip.qq.com
+"""
+import tensorflow as tf
+
+
+class Channel_attention(tf.keras.layers.Layer):
+    """
+    Channel attention module
+
+    Fu, Jun, et al. "Dual attention network for scene segmentation."
+    Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. 2019.
+    """
+
+    def __init__(self,
+                 gamma_initializer=tf.zeros_initializer(),
+                 gamma_regularizer=None,
+                 gamma_constraint=None,
+                 **kwargs):
+        self.gamma_initializer = gamma_initializer
+        self.gamma_regularizer = gamma_regularizer
+        self.gamma_constraint = gamma_constraint
+        super(Channel_attention, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = super(Channel_attention, self).get_config().copy()
+        config.update({
+            'gamma_initializer': self.gamma_initializer,
+            'gamma_regularizer': self.gamma_regularizer,
+            'gamma_constraint': self.gamma_constraint
+        })
+        return config
+
+    def build(self, input_shape):
+        self.gamma = self.add_weight(shape=(1,),
+                                     initializer=self.gamma_initializer,
+                                     name='gamma',
+                                     regularizer=self.gamma_regularizer,
+                                     constraint=self.gamma_constraint)
+        super(Channel_attention, self).build(input_shape)
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def call(self, inputs):
+        input_shape = inputs.get_shape().as_list()
+
+        proj_query = tf.keras.layers.Reshape((input_shape[1] * input_shape[2] * input_shape[3],
+                                              input_shape[4]))(inputs)
+        proj_key = tf.keras.backend.permute_dimensions(proj_query, (0, 2, 1))
+        energy = tf.keras.backend.batch_dot(proj_query, proj_key)
+        attention = tf.keras.activations.softmax(energy)
+
+        outputs = tf.keras.backend.batch_dot(attention, proj_query)
+        outputs = tf.keras.layers.Reshape((input_shape[1], input_shape[2], input_shape[3],
+                                           input_shape[4]))(outputs)
+        outputs = self.gamma * outputs + inputs
+
+        return outputs
+
+
+class Position_attention(tf.keras.layers.Layer):
+    """
+    Position attention module
+
+    Fu, Jun, et al. "Dual attention network for scene segmentation."
+    Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. 2019.
+    """
+
+    def __init__(self,
+                 ratio=8,
+                 gamma_initializer=tf.zeros_initializer(),
+                 gamma_regularizer=None,
+                 gamma_constraint=None,
+                 **kwargs):
+        self.ratio = ratio
+        self.gamma_initializer = gamma_initializer
+        self.gamma_regularizer = gamma_regularizer
+        self.gamma_constraint = gamma_constraint
+        super(Position_attention, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = super(Position_attention, self).get_config().copy()
+        config.update({
+            'ratio': self.ratio,
+            'gamma_initializer': self.gamma_initializer,
+            'gamma_regularizer': self.gamma_regularizer,
+            'gamma_constraint': self.gamma_constraint
+        })
+        return config
+
+    def build(self, input_shape):
+        super(Position_attention, self).build(input_shape)
+        self.query_conv = tf.keras.layers.Conv3D(filters=input_shape[-1] // self.ratio,
+                                                 kernel_size=(1, 1, 1), use_bias=False,
+                                                 kernel_initializer='he_normal')
+        self.key_conv = tf.keras.layers.Conv3D(filters=input_shape[-1] // self.ratio,
+                                               kernel_size=(1, 1, 1), use_bias=False,
+                                               kernel_initializer='he_normal')
+        self.value_conv = tf.keras.layers.Conv3D(filters=input_shape[-1], kernel_size=(1, 1, 1),
+                                                 use_bias=False, kernel_initializer='he_normal')
+        self.gamma = self.add_weight(shape=(1,),
+                                     initializer=self.gamma_initializer,
+                                     name='gamma',
+                                     regularizer=self.gamma_regularizer,
+                                     constraint=self.gamma_constraint)
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def call(self, inputs):
+        input_shape = inputs.get_shape().as_list()
+
+        proj_query = tf.keras.layers.Reshape((input_shape[1] * input_shape[2] * input_shape[3],
+                                              input_shape[4] // self.ratio))(self.query_conv(inputs))
+        proj_query = tf.keras.backend.permute_dimensions(proj_query, (0, 2, 1))
+        proj_key = tf.keras.layers.Reshape((input_shape[1] * input_shape[2] * input_shape[3],
+                                            input_shape[4] // self.ratio))(self.key_conv(inputs))
+        energy = tf.keras.backend.batch_dot(proj_key, proj_query)
+        attention = tf.keras.activations.softmax(energy)
+
+        proj_value = tf.keras.layers.Reshape((input_shape[1] * input_shape[2] * input_shape[3],
+                                              input_shape[4]))(self.value_conv(inputs))
+
+        outputs = tf.keras.backend.batch_dot(attention, proj_value)
+        outputs = tf.keras.layers.Reshape((input_shape[1], input_shape[2], input_shape[3],
+                                           input_shape[4]))(outputs)
+        outputs = self.gamma * outputs + inputs
+
+        return outputs
+
+

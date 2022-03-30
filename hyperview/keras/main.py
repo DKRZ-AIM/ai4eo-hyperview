@@ -19,13 +19,13 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=8, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
-parser.add_argument('-c', '--channel-type', default=4, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=0, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-c', '--channel-type', default=5, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
 parser.add_argument('-b','--batch-size', default=1, type=int, metavar='BS', help='number of batch size (default: 32)')
-parser.add_argument('-w','--width', default=32, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
+parser.add_argument('-w','--width', default=224, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -72,10 +72,10 @@ def train_model(model, dataset, log_args, warmup=True):
     #with strategy.scope():
         if warmup:
             print('\n\nWARM-UP SESSION STARTED!\n\n')
-            #for idx in range(len(model.submodules)):
-                #if 'backbone_model' in model.submodules[idx].name:
-                #    model.submodules[idx].trainable=False
-                #    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = False
+            for idx in range(len(model.submodules)):
+                if 'backbone_model' in model.submodules[idx].name:
+                    model.submodules[idx].trainable=False
+                    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = False
 
             learning_rate = args.learning_rate / 10
             num_epochs = ceil(args.num_epochs / 15)
@@ -111,7 +111,7 @@ def train_model(model, dataset, log_args, warmup=True):
         # lossWeights = {"total": 1, "P": 0 / 1100, "K": 0 / 2500, "Mg": 0 / 2000, "pH": 0 / 3}
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
-        lossWeights = {"total": 0, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 1 }
+        lossWeights = {"total": 1, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 0 }
         model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
