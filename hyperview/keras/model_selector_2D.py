@@ -263,7 +263,7 @@ class BackboneModel(tf.keras.Model):
             single_channel_header = tf.keras.Sequential()
             #single_channel_header.add(GlobalAvgPool2D())
             single_channel_header.add(Flatten())
-            single_channel_header.add(Dense(out_shape, activation=activations.linear))
+            single_channel_header.add(Dense(out_shape, activation='sigmoid'))
             #single_channel_header.add(Dense(512, activation=tf.keras.layers.LeakyReLU()))
             #single_channel_header.add(Dropout(0.25))
             #single_channel_header.add(BatchNormalization())
