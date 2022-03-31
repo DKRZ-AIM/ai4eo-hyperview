@@ -131,7 +131,7 @@ class DataGenerator():
     def _trans_single_image(feature,label,filename,transform=None,eval=True,stats=None):
         def _aug_fn(image):
 
-            #image = image / np.max(stats[-1])  # MAX
+            image = image / np.max(stats[-1])  # MAX
             augmented = transform(image=image)
             feature = augmented['image']
             #feature=feature.transpose((2, 0, 1))
@@ -196,27 +196,28 @@ class DataGenerator():
     def _init_transform(image_shape, train_stats, eval_stats):
         train_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
-            A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
-            A.GaussNoise(var_limit=0.000025),
+            #A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
+            A.GaussNoise(var_limit=0.00000025),
             A.RandomRotate90(),
-            #A.Rotate(),
-            #A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.98, 1.02), p=0.5),
+            A.Rotate(),
+            A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.98, 1.02), p=0.5),
             A.Flip(),
-            #A.ShiftScaleRotate(rotate_limit=0, shift_limit_x=0.02, shift_limit_y=0.02),
+            A.ShiftScaleRotate(rotate_limit=0, shift_limit_x=0.05, shift_limit_y=0.05),
             # A.RandomBrightnessContrast(),
 
         ])
 
         valid_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
-            A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
+            A.GaussNoise(var_limit=0.00000025),
+            #A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
             A.RandomRotate90(),
             A.Flip(),
         ])
 
         eval_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
-            A.Normalize(mean=eval_stats[0]*eval_stats[2], std=eval_stats[1]*eval_stats[2], max_pixel_value=1)
+            #A.Normalize(mean=eval_stats[0]*eval_stats[2], std=eval_stats[1]*eval_stats[2], max_pixel_value=1)
             ])
 
         return train_transform, valid_transform, eval_transform
