@@ -180,8 +180,8 @@ def evaluate_model(model, generators, logging=True):
     #tr_loss = model.evaluate(generators.train_reader)
     #val_loss = model.evaluate(generators.valid_reader)
     if logging:
-        header = ['out_dir','m','c','b','l','p','wxh', 'train_loss', 'valid_loss', 'P','P_val','K','K_val', 'Mg','Mg_val','pH', 'pH_val','test_loss','P_test','K_test','Mg_test','pH_test']
-        info = [args.out_dir, args.model_type,args.channel_type,args.batch_size,args.learning_rate,args.pretrained,args.width,
+        header = ['out_dir','m','c','b','e','l','p','wxh', 'train_loss', 'valid_loss', 'P','P_val','K','K_val', 'Mg','Mg_val','pH', 'pH_val','test_loss','P_test','K_test','Mg_test','pH_test']
+        info = [args.out_dir, args.model_type,args.channel_type,args.batch_size,args.num_epochs,args.learning_rate,args.pretrained,args.width,
                 tr_loss[0], val_loss[0], tr_loss[1], val_loss[1],tr_loss[2], val_loss[2], tr_loss[3], val_loss[3],tr_loss[4], val_loss[4],te_loss[0],te_loss[1],te_loss[2],te_loss[3],te_loss[4]]
         if not os.path.exists(args.out_dir+'/'+args.log_file):
             with open(args.out_dir+'/'+args.log_file, 'w') as file:
