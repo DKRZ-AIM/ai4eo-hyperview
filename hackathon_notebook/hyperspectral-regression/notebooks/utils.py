@@ -17,46 +17,27 @@ def get_xy():
     # y = df["soil_moisture"].values
 
     # return X, y
-
+    NUM_SAMPLES = 2
     path = '/home/kone_ka/dev/helmholtz_hackathon/train_data/'
     gt_df = pd.read_csv(path + 'train_gt.csv', index_col = 0)
     X_sample_files = glob.glob(path + 'train_data/*')
     X_samples = []
     for idx, path in enumerate(X_sample_files):
         with np.load(path) as npz:
+            flattened_channels = []
             masked_arr = np.ma.MaskedArray(**npz)
             masked_scene_mean_spectral_reflectance = [masked_arr[i,:,:].mean() for i in range(masked_arr.shape[0])]
-            masked_sample = []
-
-            data = npz['data']
-            for i in range(data.shape[0]):
-                channel = data[i,:,:]
-                mask = npz['mask'][i,:,:]
-
-                masked_sample_xs = []
-                for n in range(channel.shape[0]):
-                    xs = channel[n,:]
-                    x_mask = mask[n,:]
-                    for j in range(len(xs)):
-                        if x_mask[j]:
-                            masked_sample_xs.append(masked_scene_mean_spectral_reflectance[i])
-                        else:
-                            masked_sample_xs.append(xs[j])
-                masked_sample.append(masked_sample_xs)
-            masked_sample = np.asarray(masked_sample)
-            # masked_sample.resize((268,284))
-            # np.where(masked_sample==0, masked_scene_mean_spectral_reflectance[i], masked_sample)
-            # masked_sample = np.ndarray.flatten(masked_sample)
-            X_samples.append(masked_sample)
+            for idx, channel in enumerate(masked_arr):
+                flattened_channels.append(channel.filled(fill_value=masked_scene_mean_spectral_reflectance[idx]).flatten())
+            X_samples.append(np.asarray(flattened_channels))
             
-        NUM_SAMPLES = 10
         if idx == NUM_SAMPLES - 1:
             # X_samples = np.asarray(X_samples)
             return np.asarray(X_samples), gt_df["pH"].values[:NUM_SAMPLES]
 
-    X = X_samples
-    y = gt_df["pH"].values
-    return X, y
+    #X = X_samples
+    #y = gt_df["pH"].values
+    #return X, y
 
 
 def get_xy_split(missing_rate=0.0):
