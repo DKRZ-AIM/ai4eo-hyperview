@@ -9,6 +9,7 @@ from backbone_models.three_d_convolution_base import ThreeDCNN
 from tensorflow.keras import activations
 import os
 from tensorflow.keras.initializers import RandomNormal
+import numpy as np
 
 
 
@@ -420,7 +421,11 @@ class GAN(tf.keras.Model):
         # track the exponential moving average of the generator's weights to decrease
         # variance in the generation quality
         for weight, ema_weight in zip(self.gen_model.weights, self.ema_gen_model.weights):
-            ema_weight.assign(self.ema * ema_weight + (1 - self.ema) * weight)
+            if weight.dtype in (np.int64, np.int32, np.int8):
+                ema_weight.assign(weight)
+            else:
+                we=(self.ema * ema_weight + (1 - self.ema) * weight)
+                ema_weight.assign(we)
 
         return {m.name: m.result() for m in self.train_metrics[:]}
         #disc_real_output = self.disc_model([input_image, target_image], training=True)
