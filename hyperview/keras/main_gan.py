@@ -19,7 +19,7 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=0, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=1, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('-c', '--channel-type', default=5, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=1, type=int, metavar='NE', help='number of epochs to train (default: 120)')
@@ -60,8 +60,8 @@ def main():
     #                                                                 args.batch_size, 199,
     #                                                                 args.learning_rate, args.pretrained, args.width)
     model = get_gan_model(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
-    #model.build(tuple((None, *dataset.image_shape)))
-    #train_model(model, dataset, experiment_log, warmup=True)
+    model.build(tuple((None, *dataset.image_shape)))
+    train_model(model, dataset, experiment_log, warmup=True)
     model = get_gan_model(args.model_type, args.channel_type, dataset.image_shape, dataset.label_shape,pretrained=args.pretrained)
     model.load_weights('{}_model_best.h5'.format(experiment_log))
     train_model(model, dataset, experiment_log, warmup=False)
