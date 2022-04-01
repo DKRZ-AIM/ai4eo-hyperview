@@ -305,11 +305,11 @@ class GAN(tf.keras.Model):
     def __init__(self, model_type, channel_type,input_shape,label_shape,pretrained):
         super(GAN, self).__init__()
         self.gen_model=SpatioMultiChannellModel(model_type, channel_type,input_shape,label_shape,pretrained)
-        self.gen_model.build(tuple((None, *input_shape)))
+        #self.gen_model.build(tuple((None, *input_shape)))
         self.disc_model=DiscriminatorModel( input_shape, label_shape)
-        self.disc_model.build([tuple((None, *input_shape)), tuple((None, label_shape))])
+        #self.disc_model.build([tuple((None, *input_shape)), tuple((None, label_shape))])
         self.ema_gen_model = SpatioMultiChannellModel(model_type, channel_type,input_shape,label_shape,pretrained)
-        self.ema_gen_model.build(tuple((None, *input_shape)))
+        #self.ema_gen_model.build(tuple((None, *input_shape)))
         #self.ema_gen_model.trainable=False
         self.ema = 0.99
 

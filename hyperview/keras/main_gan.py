@@ -49,22 +49,25 @@ def main():
         os.makedirs(args.out_dir)
     image_shape = (args.width, args.width)
     dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
-                            valid_size=0.24,
+                            valid_size=0.20,
                             image_shape=image_shape,
                             batch_size=args.batch_size)
 
 
 
     experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type,args.channel_type, args.batch_size,args.num_epochs, args.learning_rate, args.pretrained,args.width)
-    #experiment_log_temp = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.channel_type,
-    #                                                                 args.batch_size, 199,
-    #                                                                 args.learning_rate, args.pretrained, args.width)
+    experiment_log_temp = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.channel_type,
+                                                                     args.batch_size, 199,
+                                                                     args.learning_rate, args.pretrained, args.width)
     model = get_gan_model(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
     model.build(tuple((None, *dataset.image_shape)))
-    train_model(model, dataset, experiment_log, warmup=True)
-    model = get_gan_model(args.model_type, args.channel_type, dataset.image_shape, dataset.label_shape,pretrained=args.pretrained)
-    model.load_weights('{}_model_best.h5'.format(experiment_log))
+    #train_model(model, dataset, experiment_log, warmup=True)
+    #model = get_gan_model(args.model_type, args.channel_type, dataset.image_shape, dataset.label_shape,pretrained=args.pretrained)
+    #model.build(tuple((None, *dataset.image_shape)))
+    model.load_weights('{}_model_best.h5'.format(experiment_log_temp))
     train_model(model, dataset, experiment_log, warmup=False)
+    #model = get_gan_model(args.model_type, args.channel_type, dataset.image_shape, dataset.label_shape,pretrained=args.pretrained)
+    #model.build(tuple((None, *dataset.image_shape)))
     model.load_weights('{}_model_best.h5'.format(experiment_log))
     evaluate_model(model, dataset)
     create_submission(model, dataset.eval_reader,experiment_log)
@@ -85,10 +88,10 @@ def train_model(model, dataset, log_args, warmup=True):
 
         else:
             print('\n\nTRAINING SESSION STARTED!\n\n')
-            for idx in range(len(model.submodules)):
-                if 'backbone_model' in model.submodules[idx].name:
-                    model.submodules[idx].trainable = True
-                    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = True
+            #for idx in range(len(model.submodules)):
+            #    if 'backbone_model' in model.submodules[idx].name:
+            #        model.submodules[idx].trainable = True
+            #        for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = True
             model.trainable=True
             learning_rate = args.learning_rate
             num_epochs = args.num_epochs

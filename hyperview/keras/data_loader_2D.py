@@ -37,7 +37,7 @@ class DataGenerator():
         train_files = DataGenerator._load_data(train_dir)
         train_labels = DataGenerator._load_gt(label_dir)
         train_files, valid_files, train_labels, valid_labels = train_test_split(train_files, train_labels, test_size = valid_size, random_state = 42)
-        test_files, valid_files, test_labels, valid_labels = train_test_split(valid_files, valid_labels,test_size=0.5, random_state=42)
+        valid_files, test_files,  valid_labels, test_labels = train_test_split(valid_files, valid_labels,test_size=0.20, random_state=42)
 
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
