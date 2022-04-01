@@ -197,22 +197,23 @@ class DataGenerator():
         train_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
             #A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
-            A.GaussNoise(var_limit=0.00000025),
-            A.RandomRotate90(),
-            A.Rotate(),
-            A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.98, 1.02), p=0.5),
-            A.Flip(),
-            A.ShiftScaleRotate(rotate_limit=0, shift_limit_x=0.05, shift_limit_y=0.05),
+            A.GaussNoise(var_limit=0.00000025,p=0.25),
+            A.RandomRotate90(p=0.25),
+            #A.Rotate(),
+            A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.95, 1.05), p=0.25),
+            A.Flip(p=0.25),
+            A.ShiftScaleRotate(rotate_limit=90, shift_limit_x=0.05, shift_limit_y=0.05,p=0.25),
             # A.RandomBrightnessContrast(),
 
         ])
 
         valid_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
-            A.GaussNoise(var_limit=0.00000025),
+            A.GaussNoise(var_limit=0.00000025,p=0.25),
             #A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
-            A.RandomRotate90(),
-            A.Flip(),
+            A.ShiftScaleRotate(rotate_limit=90, shift_limit_x=0.05, shift_limit_y=0.05,p=0.25),
+            A.RandomRotate90(p=0.25),
+            A.Flip(p=0.25),
         ])
 
         eval_transform = A.Compose([
