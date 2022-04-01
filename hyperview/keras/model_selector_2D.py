@@ -158,11 +158,13 @@ class SpatioMultiChannellModel(tf.keras.Model):
     def _multi_channel_builder_5(model_type, pretrained, label_shape, temporal_input):
 
         input = tf.squeeze(temporal_input, -4)
-        multi_chanel_model = tf.keras.Sequential()
-        multi_chanel_model(Channel_attention())
-        multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1,1), activation='relu'))
+        out=Channel_attention()(input)
+        out=Conv2D(filters=3, kernel_size=(1, 1), activation='relu')(out)
+        #multi_chanel_model = tf.keras.Sequential()
+        #multi_chanel_model(Channel_attention())
+        #multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1,1), activation='relu'))
 
-        out = multi_chanel_model(input)
+        #out = multi_chanel_model(input)
 
         backbone = BackboneModel(model_type, out.shape[1:], pretrained)
 
@@ -175,15 +177,16 @@ class SpatioMultiChannellModel(tf.keras.Model):
     def _multi_channel_builder_6(model_type, pretrained, label_shape, temporal_input):
 
         input = tf.squeeze(temporal_input, -4)
-        multi_chanel_model = tf.keras.Sequential()
-        multi_chanel_model(Channel_attention())
+        out = Channel_attention()(input)
+        #multi_chanel_model = tf.keras.Sequential()
+        #multi_chanel_model(Channel_attention())
         #multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1, 1), activation='relu'))
         con1 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
         con2 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
         con3 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
         con4 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
 
-        out = multi_chanel_model(input)
+        #out = multi_chanel_model(input)
         out1 = con1(out)
         out2 = con2(out)
         out3 = con3(out)
