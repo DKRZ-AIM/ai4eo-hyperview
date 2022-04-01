@@ -56,11 +56,14 @@ def main():
 
 
     experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type,args.channel_type, args.batch_size,args.num_epochs, args.learning_rate, args.pretrained,args.width)
+    experiment_log_temp = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.channel_type,
+                                                                     args.batch_size, 199,
+                                                                     args.learning_rate, args.pretrained, args.width)
     model = get_gan_model(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
     #model.build(tuple((None, *dataset.image_shape)))
     #train_model(model, dataset, experiment_log, warmup=True)
     model = get_gan_model(args.model_type, args.channel_type, dataset.image_shape, dataset.label_shape,pretrained=args.pretrained)
-    model.load_weights('{}_model_best.h5'.format(experiment_log))
+    model.load_weights('{}_model_best.h5'.format(experiment_log_temp))
     train_model(model, dataset, experiment_log, warmup=False)
     model.load_weights('{}_model_best.h5'.format(experiment_log))
     evaluate_model(model, dataset)
