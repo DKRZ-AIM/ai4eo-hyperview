@@ -311,7 +311,7 @@ class GAN(tf.keras.Model):
         self.ema_gen_model = SpatioMultiChannellModel(model_type, channel_type,input_shape,label_shape,pretrained)
         #self.ema_gen_model.build(tuple((None, *input_shape)))
         #self.ema_gen_model.trainable=False
-        self.ema = 0.99
+        self.ema = 0.9
 
     def predict(self, input_image):
 
