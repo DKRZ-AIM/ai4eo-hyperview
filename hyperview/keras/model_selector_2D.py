@@ -313,14 +313,18 @@ class GAN(tf.keras.Model):
         #self.ema_gen_model.trainable=False
         self.ema = 0.99
 
+    def predict(self, input_image):
+
+       generated_images = self.ema_gen_model.predict(input_image)
+       return generated_images
 
     def call(self, input_image, training=False):
 
         #input_image, target_image = data
         if training:
-            generated_images = self.gen_model(input_image, training=training)
+            generated_images = self.gen_model.call(input_image, training=training)
         else:
-            generated_images = self.ema_gen_model(input_image, training=training)
+            generated_images = self.ema_gen_model.call(input_image,training=training)
         #gen_output = self.generate(data, training=training)
         #disc_real_output = self.disc_model([input_image, target_image], training=training)
         #disc_gene_output = self.disc_model([input_image, gen_output], training=training)
