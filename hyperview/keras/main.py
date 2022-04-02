@@ -147,7 +147,7 @@ def evaluate_model(model, generators, logging=True):
 
     print('\n\nEVALUATION SESSION STARTED!\n\n')
     tr_loss = challenge_eval(model,generators.train_reader)
-    val_loss = challenge_eval(model,generators.valid_reader)
+    val_loss = challenge_eval(model,generators.evalid_reader)
     te_loss = challenge_eval(model, generators.test_reader)
 
     print('TOTAL LOSS:  Training: {}, Validation: {}, Test: {}'.format(tr_loss[0],val_loss[0],te_loss[0]))

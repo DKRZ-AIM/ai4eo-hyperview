@@ -9,6 +9,7 @@ import os
 from glob import glob
 from sklearn.model_selection import train_test_split
 from sklearn import preprocessing
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 
 class DataGenerator():
@@ -36,6 +37,7 @@ class DataGenerator():
 
         train_files = DataGenerator._load_data(train_dir)
         train_labels = DataGenerator._load_gt(label_dir)
+        #train_labels = np.vsplit(train_labels, len(train_labels))
         train_files, valid_files, train_labels, valid_labels = train_test_split(train_files, train_labels, test_size = valid_size, random_state = 42)
         valid_files, test_files,  valid_labels, test_labels = train_test_split(valid_files, valid_labels,test_size=0.20, random_state=42)
 
@@ -44,8 +46,9 @@ class DataGenerator():
 
         self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,image_shape,stats=self.train_stats)
         self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,image_shape,stats=self.train_stats)
-        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans,image_shape,stats=self.eval_stats)
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,image_shape,eval=True,stats=self.eval_stats)
+        self.evalid_reader = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, eval_trans,image_shape,ext_aug=False, stats=self.train_stats)
+        self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans,image_shape,ext_aug=False,stats=self.eval_stats)
+        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,image_shape,ext_aug=False,eval=True,stats=self.eval_stats)
 
         self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
 
@@ -58,10 +61,11 @@ class DataGenerator():
             return image_shape,label_shape,
 
     @staticmethod
-    def _get_data_reader(files, labels, batch_size, transform, image_shape, eval=False,stats=None):
+    def _get_data_reader(files, labels, batch_size, transform, image_shape, ext_aug=True, eval=False,stats=None):
+
 
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
-        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,image_shape),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,image_shape,ext_aug),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
         if not eval:
             dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval,stats=stats),num_parallel_calls=tf.data.AUTOTUNE)
@@ -97,6 +101,42 @@ class DataGenerator():
         return all_files
 
     @staticmethod
+    def _load_data_2(directory: str):
+        datalist = []
+
+        all_files = np.array(
+            sorted(
+                glob(os.path.join(directory, "*.npz")),
+                key=lambda x: int(os.path.basename(x).replace(".npz", "")),
+            )
+        )
+        for file_name in all_files:
+            with np.load(file_name) as npz:
+                image = npz['data']
+                mask = (1 - npz['mask'].astype(int))
+                image = (image * mask)
+                datalist.append(image)
+
+        return datalist
+
+    @staticmethod
+    def preprocess_extract_patch(target_shape):
+        def _preprocess_extract_patch(image):
+            print(image.shape)
+            max_edge = np.max(image.shape[1:])
+            if max_edge < target_shape[0]:
+                max_edge = target_shape
+            else:
+                max_edge = (max_edge, max_edge)
+            image = DataGenerator._shape_pad(image, max_edge)
+            image = image.transpose((1, 2, 0))
+            return image
+
+        return _preprocess_extract_patch
+
+
+
+    @staticmethod
     def _shape_pad(data,shape):
         padded=np.pad(data,
                       ((0, 0),
@@ -107,19 +147,29 @@ class DataGenerator():
         return padded
 
     @staticmethod
-    def _deparse_single_image(filename, label, target_shape):
+    def _deparse_single_image(filename, label, target_shape,ext_aug=True):
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
                 image = npz['data']
                 mask = (1 - npz['mask'].astype(int))
                 image = (image * mask)
+                sh=image.shape[1:]
+                max_edge = np.max(sh)
+                min_edge = np.min(sh) #AUGMENT BY SHAPE
+                flag=True
+                if ext_aug:
+                    if min_edge>32:
+                        x = np.random.randint(sh[0]+1 - min_edge)
+                        y = np.random.randint(sh[1]+1 - min_edge)
+                        image=image[:,x:(x+min_edge),y:(y+min_edge)]
+                        flag=False
 
-                max_edge = np.max(image.shape[1:])
-                if max_edge<target_shape[0]:
-                    max_edge=target_shape
-                else:
-                    max_edge=(max_edge,max_edge)
-                image = DataGenerator._shape_pad(image, max_edge)
+                if flag:
+                    if max_edge<target_shape[0]:
+                        max_edge=target_shape
+                    else:
+                        max_edge=(max_edge,max_edge)
+                    image = DataGenerator._shape_pad(image, max_edge)
                 image = image.transpose((1, 2, 0))
 
                 return image
@@ -209,11 +259,13 @@ class DataGenerator():
 
         valid_transform = A.Compose([
             A.Resize(image_shape[0], image_shape[1]),
+            # A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
             A.GaussNoise(var_limit=0.00000025,p=0.25),
-            #A.Normalize(mean=train_stats[0]*train_stats[2], std=train_stats[1]*train_stats[2], max_pixel_value=1),
-            A.ShiftScaleRotate(rotate_limit=90, shift_limit_x=0.05, shift_limit_y=0.05,p=0.25),
             A.RandomRotate90(p=0.25),
+            A.RandomResizedCrop(image_shape[0], image_shape[1], ratio=(0.95, 1.05), p=0.25),
             A.Flip(p=0.25),
+            A.ShiftScaleRotate(rotate_limit=90, shift_limit_x=0.05, shift_limit_y=0.05,p=0.25),
+
         ])
 
         eval_transform = A.Compose([
