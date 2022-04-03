@@ -165,8 +165,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         input = tf.squeeze(temporal_input, -4)
         multi_chanel_model = tf.keras.Sequential()
-        multi_chanel_model.add(Conv2D(filters=128, kernel_size=(1, 1)))
-        multi_chanel_model.add(ECA(kernel=9))
+        multi_chanel_model.add(Conv2D(filters=96, kernel_size=(1, 1)))
+        multi_chanel_model.add(ECA(kernel=5))
         #multi_chanel_model.add(Conv2D(filters=16, kernel_size=(1,1)))
         #multi_chanel_model.add(ECA(kernel=3))
 
