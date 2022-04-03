@@ -459,7 +459,7 @@ def SwinTransformer(model_name='swin_tiny_224', num_classes=1000, include_top=Tr
     return net
 
 
-def SwinTransformer2(model_name='swin_tiny_224', num_classes=1000, include_top=True, pretrained=True, use_tpu=False, cfgs=CFGS,in_channel=16):
+def SwinTransformer2(input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=True, pretrained=True, use_tpu=False, cfgs=CFGS):
     cfg = cfgs[model_name]
     net = SwinTransformerModel(
         model_name=model_name, include_top=include_top, num_classes=num_classes, img_size=cfg['input_size'], window_size=cfg[
@@ -467,10 +467,10 @@ def SwinTransformer2(model_name='swin_tiny_224', num_classes=1000, include_top=T
     )
     net2 = SwinTransformerModel(
         model_name=model_name, include_top=include_top, num_classes=num_classes, img_size=cfg['input_size'],
-        window_size=cfg['window_size'], embed_dim=cfg['embed_dim'], depths=cfg['depths'], num_heads=cfg['num_heads'],in_chans=in_channel,
+        window_size=cfg['window_size'], embed_dim=cfg['embed_dim'], depths=cfg['depths'], num_heads=cfg['num_heads'],in_chans=input_shape[-1],
     )
     net(tf.keras.Input(shape=(cfg['input_size'][0], cfg['input_size'][1], 3)))
-    net2(tf.keras.Input(shape=(cfg['input_size'][0], cfg['input_size'][1], in_channel)))
+    net2(tf.keras.Input(shape=(cfg['input_size'][0], cfg['input_size'][1], input_shape[-1])))
     if pretrained is True:
         url = f'https://github.com/rishigami/Swin-Transformer-TF/releases/download/v0.1-tf-swin-weights/{model_name}.tgz'
         pretrained_ckpt = tf.keras.utils.get_file(
