@@ -5,7 +5,7 @@ from tensorflow import keras
 
 class InvertedRes(layers.Layer):
     def __init__(self, expand_channels, output_channels, strides=1):
-        super().__init__()
+        super().__init__(name='inverted_res')
         self.output_channels = output_channels
         self.strides = strides
         self.expand = keras.Sequential([
@@ -33,7 +33,7 @@ class InvertedRes(layers.Layer):
 
 class FullyConnected(layers.Layer):
   def __init__(self, hidden_units, dropout_rate):
-    super().__init__()
+    super().__init__(name='fully_connected')
     l = []
     for units in hidden_units:
       l.append(layers.Dense(units, activation=tf.nn.swish))
@@ -46,7 +46,7 @@ class FullyConnected(layers.Layer):
 
 class Transformer(layers.Layer):
     def __init__(self, projection_dim, heads=2):
-        super().__init__()
+        super().__init__(name='transformer')
         self.norm1 = layers.LayerNormalization(epsilon=1e-6)
         self.attention = layers.MultiHeadAttention(num_heads=heads, key_dim=projection_dim, dropout=0.1)
         self.norm2 = layers.LayerNormalization(epsilon=1e-6)
@@ -64,7 +64,7 @@ class Transformer(layers.Layer):
 
 class MobileVitBlock(layers.Layer):
   def __init__(self, num_blocks, projection_dim,patch_size=4, strides=1):
-    super().__init__()
+    super().__init__(name='mobile_vit_block')
     self.patch_size=patch_size
     self.projection_dim = projection_dim
     self.conv_local = keras.Sequential([
