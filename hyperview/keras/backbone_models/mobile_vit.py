@@ -12,16 +12,16 @@ class InvertedRes(layers.Layer):
             layers.Conv2D(expand_channels, 1, padding="same", use_bias=False),
             layers.BatchNormalization(),
             layers.Activation('swish')
-        ], name="expand")
+        ])
         self.dw_conv = keras.Sequential([
             layers.DepthwiseConv2D(3, strides=strides, padding="same", use_bias=False),
             layers.BatchNormalization(),
             layers.Activation('swish')
-        ], name="depthwise")
+        ])
         self.pw_conv = keras.Sequential([
             layers.Conv2D(output_channels, 1, padding="same", use_bias=False),
             layers.BatchNormalization(),
-        ], name='pointwise')
+        ])
 
     def call(self, x):
         o = self.expand(x)
@@ -145,6 +145,8 @@ class MobileVitC(keras.Model):
                                                  layers.Conv2D(320, 1, padding="same", strides=(1, 1),
                                                                activation=tf.nn.swish)
                                                  ], name="features")
+
+
 
         head = keras.models.Sequential([layers.GlobalAvgPool2D(),
                                              layers.Dense(num_classes, activation=classifier_activation)

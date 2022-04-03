@@ -224,7 +224,9 @@ class SpatioMultiChannellModel(tf.keras.Model):
         multi_chanel_model.add(ECA(kernel=3,name='eca2'))
         out = multi_chanel_model(input)
 
+
         backbone = BackboneModel(model_type, out.shape[1:], pretrained)
+
 
         out = backbone(out)
         out = Layer(name='total')(out)
