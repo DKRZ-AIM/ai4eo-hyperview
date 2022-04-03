@@ -19,8 +19,8 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=9, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
-parser.add_argument('-c', '--channel-type', default=8, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=0, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-c', '--channel-type', default=5, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
@@ -72,10 +72,10 @@ def train_model(model, dataset, log_args, warmup=True):
     #with strategy.scope():
         if warmup:
             print('\n\nWARM-UP SESSION STARTED!\n\n')
-            for idx in range(len(model.submodules)):
-                if 'backbone_model' in model.submodules[idx].name:
-                    model.submodules[idx].trainable=False
-                    for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = False
+            #for idx in range(len(model.submodules)):
+            #    if 'backbone_model' in model.submodules[idx].name:
+            #        model.submodules[idx].trainable=False
+            #        for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = False
 
             learning_rate = args.learning_rate / 1
             num_epochs = ceil(args.num_epochs / 15)

@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import *
 import tensorflow_addons as tfa
-from backbone_models.swin_transformer import SwinTransformer
+from backbone_models.swin_transformer import SwinTransformer,SwinTransformer2
 from backbone_models.mobile_vit import MobileVit,MobileVitC
 from backbone_models.vit import ViT
 from backbone_models.capsule_network import CapsNetBasic
@@ -167,7 +167,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
         multi_chanel_model = tf.keras.Sequential()
         multi_chanel_model.add(Conv2D(filters=128, kernel_size=(1, 1)))
         multi_chanel_model.add(ECA(kernel=9))
-        multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1,1)))
+        #multi_chanel_model.add(Conv2D(filters=16, kernel_size=(1,1)))
+        #multi_chanel_model.add(ECA(kernel=3))
 
         out = multi_chanel_model(input)
 
@@ -262,7 +263,7 @@ class BackboneModel(tf.keras.Model):
             model=None
             weights = 'imagenet' if pretrained else None
             if model_type == 0:
-                model=SwinTransformer('swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
+                model=SwinTransformer2('swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
 
             if model_type == 1:
                 if weights=='imagenet':
