@@ -676,3 +676,39 @@ def SwinTransformer2(input_shape,model_name='swin_tiny_224', num_classes=1000, i
             net2.layers[i].set_weights(net.layers[i].get_weights())
             net2.layers[i].trainable=False
     return net2
+
+def SwinTransformer3(input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=True, pretrained=True, use_tpu=False, cfgs=CFGS):
+    cfg = cfgs[model_name]
+    net = SwinTransformerModel(
+        model_name=model_name, include_top=include_top, num_classes=num_classes, img_size=cfg['input_size'], window_size=cfg[
+            'window_size'], embed_dim=cfg['embed_dim'], depths=cfg['depths'], num_heads=cfg['num_heads']
+    )
+    net2 = SwinTransformerModel(
+        model_name=model_name, include_top=include_top, num_classes=num_classes, img_size=cfg['input_size'],
+        window_size=cfg['window_size'], embed_dim=cfg['embed_dim'], depths=cfg['depths'], num_heads=cfg['num_heads'],in_chans=input_shape[-1],
+    )
+    net(tf.keras.Input(shape=(cfg['input_size'][0], cfg['input_size'][1], 3)))
+    net2(tf.keras.Input(shape=(cfg['input_size'][0], cfg['input_size'][1], input_shape[-1])))
+    if pretrained is True:
+        url = f'https://github.com/rishigami/Swin-Transformer-TF/releases/download/v0.1-tf-swin-weights/{model_name}.tgz'
+        pretrained_ckpt = tf.keras.utils.get_file(
+            model_name, url, untar=True,cache_dir=os.path.join(os.getcwd(), 'models/'))
+    else:
+        pretrained_ckpt = pretrained
+
+    if pretrained_ckpt:
+        if tf.io.gfile.isdir(pretrained_ckpt):
+            pretrained_ckpt = f'{pretrained_ckpt}/{model_name}.ckpt'
+
+        if use_tpu:
+            load_locally = tf.saved_model.LoadOptions(
+                experimental_io_device='/job:localhost')
+            net.load_weights(pretrained_ckpt, options=load_locally)
+        else:
+            net.load_weights(pretrained_ckpt)
+
+    for i in range(len(net.layers)):
+        if i>0:
+            net2.layers[i].set_weights(net.layers[i].get_weights())
+            net2.layers[i].trainable=False
+    return net2

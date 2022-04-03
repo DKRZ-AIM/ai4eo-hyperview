@@ -1,7 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.layers import *
 import tensorflow_addons as tfa
-from backbone_models.swin_transformer import SwinTransformer,SwinTransformer2
+from backbone_models.swin_transformer import SwinTransformer,SwinTransformer2,SwinTransformer3
 from backbone_models.mobile_vit import MobileVit,MobileVitC
 from backbone_models.vit import ViT
 from backbone_models.capsule_network import CapsNetBasic
@@ -266,49 +266,52 @@ class BackboneModel(tf.keras.Model):
                 model=SwinTransformer2(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
 
             if model_type == 1:
+                model=SwinTransformer3(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
+
+            if model_type == 2:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_small_224_1.0_float_no_top_v2.h5')
                 model=tf.keras.applications.MobileNetV3Small(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
 
-            if model_type == 2:
+            if model_type == 3:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/weights_mobilenet_v3_large_224_1.0_float_no_top_v2.h5')
                 model=tf.keras.applications.MobileNetV3Large(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
-            if model_type == 3:
+            if model_type == 4:
                 if weights=='imagenet':
                     weights=os.path.join(os.getcwd(), 'models/efficientnetv2-s_notop.h5')
                 model=tf.keras.applications.EfficientNetV2S(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
-            if model_type == 4:
+            if model_type == 5:
                 #if weights=='imagenet':
                     #weights=os.path.join(os.getcwd(), 'models/evgg19_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.VGG19(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
-            if model_type == 5:
+            if model_type == 6:
                 #if weights=='imagenet':
                     #weights=os.path.join(os.getcwd(), 'models/xception_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.Xception(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
-            if model_type == 6:
+            if model_type == 7:
                 #if weights=='imagenet':
                     #weights=os.path.join(os.getcwd(), 'models/resnet50v2_weights_tf_dim_ordering_tf_kernels.h5')
                 model=tf.keras.applications.ResNet50V2(input_shape=input_shape, include_top=False,
                                                               classifier_activation=None,
                                                               weights=weights)
-            if model_type == 7:
+            if model_type == 8:
                 model=MobileVit(input_shape=input_shape, include_top=False,classifier_activation=None)
 
-            if model_type == 8:
+            if model_type == 9:
                 model = ViT(input_shape=input_shape, include_top=False, classifier_activation=None)
 
-            if model_type == 9:
+            if model_type == 10:
                 model=MobileVitC(input_shape=input_shape, include_top=False,classifier_activation=None)
 
 
