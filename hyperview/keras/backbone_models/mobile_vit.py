@@ -125,3 +125,35 @@ class MobileVit(keras.Model):
 
 
 
+class MobileVitC(keras.Model):
+    def __init__(self, input_shape, include_top=True,classifier_activation=None,
+                                                        num_classes=1000,expansion_ratio = 2.0):
+        inp=tf.keras.layers.Input(shape=input_shape)
+        features = keras.models.Sequential([
+                                                 layers.Conv2D(16, 16, padding="same", strides=(2, 2),
+                                                               activation=tf.nn.swish),
+                                                 InvertedRes(16 * expansion_ratio, 16, strides=1),
+                                                 InvertedRes(16 * expansion_ratio, 24, strides=2),
+                                                 InvertedRes(24 * expansion_ratio, 24, strides=1),
+                                                 InvertedRes(24 * expansion_ratio, 24, strides=1),
+                                                 InvertedRes(24 * expansion_ratio, 48, strides=2),
+                                                 MobileVitBlock(2, 64, strides=1),
+                                                 InvertedRes(64 * expansion_ratio, 64, strides=2),
+                                                 MobileVitBlock(4, 80, strides=1),
+                                                 InvertedRes(80 * expansion_ratio, 80, strides=2),
+                                                 MobileVitBlock(3, 96, strides=1),
+                                                 layers.Conv2D(320, 1, padding="same", strides=(1, 1),
+                                                               activation=tf.nn.swish)
+                                                 ], name="features")
+
+        head = keras.models.Sequential([layers.GlobalAvgPool2D(),
+                                             layers.Dense(num_classes, activation=classifier_activation)
+                                             ], name="logits")
+        out1 = features(inp)
+        out2 = head(out1)
+
+        if include_top:
+            super(MobileVitC, self).__init__(inputs=inp, outputs=out2)
+        else:
+            super(MobileVitC, self).__init__(inputs=inp, outputs=out1)
+

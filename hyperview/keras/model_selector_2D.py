@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.keras.layers import *
 import tensorflow_addons as tfa
 from backbone_models.swin_transformer import SwinTransformer
-from backbone_models.mobile_vit import MobileVit
+from backbone_models.mobile_vit import MobileVit,MobileVitC
 from backbone_models.vit import ViT
 from backbone_models.capsule_network import CapsNetBasic
 from backbone_models.three_d_convolution_base import ThreeDCNN
@@ -10,6 +10,7 @@ from tensorflow.keras import activations
 import os
 from tensorflow.keras.initializers import RandomNormal
 import numpy as np
+import math
 
 
 
@@ -33,6 +34,9 @@ class SpatioMultiChannellModel(tf.keras.Model):
             fet_out=SpatioMultiChannellModel._multi_channel_builder_5(model_type, pretrained, label_shape,temporal_input)
         elif channel_type==6:
             fet_out=SpatioMultiChannellModel._multi_channel_builder_6(model_type, pretrained, label_shape,temporal_input)
+
+        elif channel_type==7:
+            fet_out=SpatioMultiChannellModel._multi_channel_builder_7(model_type, pretrained, label_shape,temporal_input)
 
 
         #input_layer = Input(shape=(16,))
@@ -159,7 +163,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         input = tf.squeeze(temporal_input, -4)
         multi_chanel_model = tf.keras.Sequential()
-        multi_chanel_model(Channel_attention())
+        multi_chanel_model.add(ECA(kernel=9))
         multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1,1), activation='relu'))
 
         out = multi_chanel_model(input)
@@ -176,7 +180,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         input = tf.squeeze(temporal_input, -4)
         multi_chanel_model = tf.keras.Sequential()
-        multi_chanel_model(Channel_attention())
+        multi_chanel_model.add(ECA(kernel=9))
         #multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1, 1), activation='relu'))
         con1 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
         con2 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
@@ -203,6 +207,24 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
 
 
+        out = Layer(name='total')(out)
+
+        return out
+
+    @staticmethod
+    def _multi_channel_builder_7(model_type, pretrained, label_shape, temporal_input):
+
+        input = tf.squeeze(temporal_input, -4)
+        multi_chanel_model = tf.keras.Sequential()
+        multi_chanel_model.add(Conv2D(filters=128, kernel_size=(1, 1), activation='relu'))
+        multi_chanel_model.add(ECA(kernel=9))
+        multi_chanel_model.add(Conv2D(filters=16, kernel_size=(1, 1), activation='relu'))
+        multi_chanel_model.add(ECA(kernel=3))
+        out = multi_chanel_model(input)
+
+        backbone = BackboneModel(model_type, out.shape[1:], pretrained)
+
+        out = backbone(out)
         out = Layer(name='total')(out)
 
         return out
@@ -259,6 +281,10 @@ class BackboneModel(tf.keras.Model):
 
             if model_type == 8:
                 model = ViT(input_shape=input_shape, include_top=False, classifier_activation=None)
+
+            if model_type == 9:
+                model=MobileVitC(input_shape=input_shape, include_top=False,classifier_activation=None)
+
 
 
             single_channel_header = tf.keras.Sequential()
@@ -571,6 +597,127 @@ class Channel_attention(tf.keras.layers.Layer):
         outputs = self.gamma * outputs + inputs
 
         return outputs
+
+
+class ECA(tf.keras.layers.Layer):
+    """ECA Conv layer.
+    NOTE: This should be applied after a convolution operation.
+    Shapes:
+        INPUT: (B, C, H, W)
+        OUPUT: (B, C_2, H, W)
+    Attributes:
+        filters (int): number of channels of input
+        eca_k_size (int): kernel size for the 1D ECA layer
+    """
+
+    def __init__(
+            self,
+            gamma=2,
+            b=2,
+            kernel=None,
+            **kwargs):
+
+        super(ECA, self).__init__()
+
+        self.kwargs = kwargs
+        self.b = b
+        self.gamma=gamma
+        self.kernel=kernel
+
+    def build(self, input_shapes):
+
+        if self.kernel==None:
+            t = int(abs(math.log(input_shapes[-1], 2) + self.b)/self.gamma)
+            k = t if t % 2 else t + 1
+        else:
+            k=self.kernel
+
+        self.eca_conv = Conv1D(
+            filters=1,
+            kernel_size=k,
+            padding='same',
+            use_bias=False)
+
+    def call(self, x):
+
+        # (B, C, 1)
+        attn = tf.math.reduce_mean(x, [-3, -2])[:, :,tf.newaxis]
+        # (B, C, 1)
+        attn = self.eca_conv(attn)
+
+        # (B, 1, 1, C)
+        attn=tf.transpose(attn, [0, 2, 1])
+        attn = tf.expand_dims(attn, -3)
+
+        # (B, 1, 1, C)
+        attn = tf.math.sigmoid(attn)
+
+        return x * attn
+
+
+class ChannelGate(tf.keras.layers.Layer):
+    """Apply Channelwise attention to input.
+    Shapes:
+        INPUT: (B, C, H, W)
+        OUPUT: (B, C, H, W)
+    Attributes:
+        gate_channels (int): number of channels of input
+        reduction_ratio (int): factor to reduce the channels in FF layer
+        pool_types (list): list of pooling operations
+    """
+
+    def __init__(
+        self,
+        gate_channels,
+        reduction_ratio=16,
+        pool_types=['avg', 'max'],
+        **kwargs):
+
+        super(ChannelGate, self).__init__()
+
+        all_pool_types = {'avg', 'max'}
+        if not set(pool_types).issubset(all_pool_types):
+            raise ValueError('The available pool types are: {}'.format(all_pool_types))
+
+        self.gate_channels = gate_channels
+        self.reduction_ratio = reduction_ratio
+        self.pool_types = pool_types
+        self.kwargs = kwargs
+
+    def build(self, input_shape):
+        hidden_units = self.gate_channels // self.reduction_ratio
+        self.mlp = models.Sequential([
+            layers.Dense(hidden_units, activation='relu'),
+            layers.Dense(self.gate_channels, activation=None)
+        ])
+
+
+    def apply_pooling(self, inputs, pool_type):
+        """Apply pooling then feed into ff.
+        Args:
+            inputs (tf.ten
+        Returns:
+            (tf.tensor) shape (B, C)
+        """
+
+        if pool_type == 'avg':
+            pool = tf.math.reduce_mean(inputs, [2, 3])
+        elif pool_type == 'max':
+            pool = tf.math.reduce_max(inputs, [2, 3])
+
+        channel_att = self.mlp(pool)
+        return channel_att
+
+    def call(self, inputs):
+        pools = [self.apply_pooling(inputs, pool_type) \
+            for pool_type in self.pool_types]
+
+        # (B, C, 1, 1)
+        attn = tf.math.sigmoid(tf.math.add_n(pools))[:, :, tf.newaxis, tf.newaxis]
+
+        return attn * inputs
+
+
 
 
 class Position_attention(tf.keras.layers.Layer):

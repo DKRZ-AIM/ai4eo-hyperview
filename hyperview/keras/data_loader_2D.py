@@ -44,8 +44,8 @@ class DataGenerator():
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
-        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,image_shape,stats=self.train_stats)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,image_shape,stats=self.train_stats)
+        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,image_shape,ext_aug=False,stats=self.train_stats)
+        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,image_shape,ext_aug=False,stats=self.train_stats)
         self.evalid_reader = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, eval_trans,image_shape,ext_aug=False, stats=self.train_stats)
         self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans,image_shape,ext_aug=False,stats=self.eval_stats)
         self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,image_shape,ext_aug=False,eval=True,stats=self.eval_stats)
