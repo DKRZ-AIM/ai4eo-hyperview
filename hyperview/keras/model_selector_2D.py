@@ -37,6 +37,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         elif channel_type==7:
             fet_out=SpatioMultiChannellModel._multi_channel_builder_7(model_type, pretrained, label_shape,temporal_input)
+        elif channel_type==8:
+            fet_out=SpatioMultiChannellModel._multi_channel_builder_8(model_type, pretrained, label_shape,temporal_input)
 
 
         #input_layer = Input(shape=(16,))
@@ -233,6 +235,25 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         return out
 
+    @staticmethod
+    def _multi_channel_builder_8(model_type, pretrained, label_shape, temporal_input):
+
+        input = tf.squeeze(temporal_input, -4)
+        multi_chanel_model = tf.keras.Sequential()
+        multi_chanel_model.add(Conv2D(filters=128, kernel_size=(1, 1)))
+        multi_chanel_model.add(ECA(kernel=9, name='eca1'))
+        multi_chanel_model.add(Conv2D(filters=16, kernel_size=(1, 1)))
+        multi_chanel_model.add(ECA(kernel=3, name='eca2'))
+        out = multi_chanel_model(input)
+
+        backbone = CapsNetBasic(out, label_shape)
+
+        out = backbone(out)
+
+        out = Layer(name='total')(out)
+
+        return out
+
 
 class BackboneModel(tf.keras.Model):
         def __init__(self, model_type, input_shape,pretrained,out_shape=4):
@@ -288,6 +309,8 @@ class BackboneModel(tf.keras.Model):
 
             if model_type == 9:
                 model=MobileVitC(input_shape=input_shape, include_top=False,classifier_activation=None)
+
+
 
 
 

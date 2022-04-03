@@ -9,6 +9,8 @@ This file contains the network definitions for the various capsule network archi
 
 from tensorflow.keras import layers, models
 from tensorflow.keras import backend as K
+import math
+from tensorflow.keras.layers import *
 K.set_image_data_format('channels_last')
 
 #### LAYERS / HELPER FUNCS
@@ -252,6 +254,8 @@ class ConvCapsuleLayer(layers.Layer):
         conv = K.conv2d(input_tensor_reshaped, self.W, (self.strides, self.strides),
                         padding=self.padding, data_format='channels_last')
 
+        #conv=ECA()
+
         # shape of the routing coefficients?
         votes_shape = K.shape(conv)  # shape [None, h, w, input_n_capsules]
         _, conv_height, conv_width, _ = conv.get_shape()
@@ -304,6 +308,70 @@ class ConvCapsuleLayer(layers.Layer):
         }
         base_config = super(ConvCapsuleLayer, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
+
+class ECA(tf.keras.layers.Layer):
+    """ECA Conv layer.
+    NOTE: This should be applied after a convolution operation.
+    Shapes:
+        INPUT: (B, C, H, W)
+        OUPUT: (B, C_2, H, W)
+    Attributes:
+        filters (int): number of channels of input
+        eca_k_size (int): kernel size for the 1D ECA layer
+    """
+
+    def __init__(
+            self,
+            gamma=2,
+            b=2,
+            kernel=None,
+            **kwargs):
+
+        super(ECA, self).__init__()
+
+        self.kwargs = kwargs
+        self.b = b
+        self.gamma=gamma
+        self.kernel=kernel
+
+    def build(self, input_shapes):
+
+        if self.kernel==None:
+            t = int(abs(math.log(input_shapes[-1], 2) + self.b)/self.gamma)
+            k = t + 1 if t % 2 else t
+        else:
+            k=self.kernel
+
+        self.eca_conv = Conv1D(
+            filters=1,
+            kernel_size=k,
+            padding='same',
+            use_bias=False)
+
+    def get_config(self):
+        config = super(ECA, self).get_config().copy()
+        return config
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+    def call(self, x):
+
+        # (B, C, 1)
+        attn = tf.math.reduce_mean(x, [-4,-3, -2])[:, :,tf.newaxis]
+        # (B, C, 1)
+        attn = self.eca_conv(attn)
+
+        # (B, 1, 1, C)
+        attn=tf.transpose(attn, [0, 2, 1])
+        attn = tf.expand_dims(attn, [-3])
+        attn = tf.expand_dims(attn, [-4])
+
+        # (B, 1, 1, C)
+        attn = tf.math.sigmoid(attn)
+
+        return x * attn
+
 
 class DeconvCapsuleLayer(layers.Layer):
     def __init__(self, kernel_size, num_capsule, num_atoms, scaling=2, upsamp_type='subpix', padding='same', routings=3,
@@ -614,23 +682,26 @@ class CapsNetBasic(tf.keras.Model):
         # Layer 1: Primary Capsule: Conv cap with routing 1
         primary_caps = ConvCapsuleLayer(kernel_size=5, num_capsule=2, num_atoms=64, strides=2, padding='same',
                                         routings=1, name='primarycaps')(conv1_reshaped)
-
+        primary_caps = ECA()(primary_caps)
         # Layer 2: Convolutional Capsule
         conv_cap_2_1 = ConvCapsuleLayer(kernel_size=5, num_capsule=4, num_atoms=128, strides=1, padding='same',
                                         routings=1, name='conv_cap_2_1')(primary_caps)
-
+        conv_cap_2_1 = ECA()(conv_cap_2_1)
         # Layer 2: Convolutional Capsule
         conv_cap_2_2 = ConvCapsuleLayer(kernel_size=5, num_capsule=4, num_atoms=32, strides=2, padding='same',
                                         routings=3, name='conv_cap_2_2')(conv_cap_2_1)
-
-        conv_cap_2_2 = ConvCapsuleLayer(kernel_size=5, num_capsule=4, num_atoms=32, strides=2, padding='same',
-                                        routings=3, name='conv_cap_2_2')(conv_cap_2_1)
-
+        conv_cap_2_2 = ECA()(conv_cap_2_2)
+        #conv_cap_2_2 = ConvCapsuleLayer(kernel_size=5, num_capsule=4, num_atoms=32, strides=2, padding='same',
+        #                                routings=3, name='conv_cap_2_2')(conv_cap_2_1)
+        #conv_cap_2_2 = ECA()(conv_cap_2_2)
         # Layer 4: Convolutional Capsule: 1x1
         out_caps = ConvCapsuleLayer(kernel_size=1, num_capsule=1, num_atoms=16, strides=1, padding='same',
                                     routings=3, name='seg_caps')(conv_cap_2_2)
-
+        out_caps = ECA()(out_caps)
         # Layer 4: This is an auxiliary layer to replace each capsule with its length. Just to match the true label's shape.
         out_seg = Length(num_classes=n_class, seg=True, name='out_seg')(out_caps)
+
+        out_seg=Flatten()(out_seg)
+        out_seg=Dense(n_class,activation='sigmoid')(out_seg)
 
         super(CapsNetBasic, self).__init__(inputs=input, outputs=out_seg)
