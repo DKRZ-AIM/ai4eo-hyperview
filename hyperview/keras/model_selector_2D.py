@@ -638,6 +638,13 @@ class ECA(tf.keras.layers.Layer):
             padding='same',
             use_bias=False)
 
+    def get_config(self):
+        config = super(ECA, self).get_config().copy()
+        return config
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
     def call(self, x):
 
         # (B, C, 1)
