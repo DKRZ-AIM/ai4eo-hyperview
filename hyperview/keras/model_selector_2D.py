@@ -183,33 +183,38 @@ class SpatioMultiChannellModel(tf.keras.Model):
     def _multi_channel_builder_6(model_type, pretrained, label_shape, temporal_input):
 
         input = tf.squeeze(temporal_input, -4)
-        multi_chanel_model = tf.keras.Sequential()
-        multi_chanel_model.add(Conv2D(filters=128, kernel_size=(1, 1)))
-        multi_chanel_model.add(ECA(kernel=9))
+        #multi_chanel_model = tf.keras.Sequential()
+        #multi_chanel_model.add()
+        con0=Conv2D(filters=150, kernel_size=(1, 1))
+        eca0 = ECA(kernel=5, grad=0)
+        eca1 = ECA(kernel=5, grad=1)
+        eca2 = ECA(kernel=5, grad=2)
+
+        fnet = FNetEncoder(150,150)
         #multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1, 1), activation='relu'))
         con1 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
         con2 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
         con3 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
         con4 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
 
-        out = multi_chanel_model(input)
-        out1 = con1(out)
-        out2 = con2(out)
-        out3 = con3(out)
-        out4 = con4(out)
+        out = con0(input)
+        out1 = con1(eca0(out))
+        out2 = con2(eca1(out))
+        out3 = con3(eca2(out))
+        out4 = con4(fnet(out))
 
-        backbone1 = BackboneModel(model_type, out1.shape[1:], pretrained,1)
-        backbone2 = BackboneModel(model_type, out2.shape[1:], pretrained,1)
-        backbone3 = BackboneModel(model_type, out3.shape[1:], pretrained,1)
-        backbone4 = BackboneModel(model_type, out4.shape[1:], pretrained,1)
+        backbone1 = BackboneModel(model_type, out1.shape[1:], pretrained,4)
+        backbone2 = BackboneModel(model_type, out2.shape[1:], pretrained,4)
+        backbone3 = BackboneModel(model_type, out3.shape[1:], pretrained,4)
+        backbone4 = BackboneModel(model_type, out4.shape[1:], pretrained,4)
 
         out1 = backbone1(out1)
         out2 = backbone2(out2)
         out3 = backbone3(out3)
         out4 = backbone4(out4)
 
-        out = tf.concat([out1,out2,out3,out4], axis=-1)
-
+        out = tf.stack([out1,out2,out3,out4], axis=-1)
+        out = tf.reduce_mean(out, axis=-1)
 
 
         out = Layer(name='total')(out)
@@ -263,7 +268,9 @@ class BackboneModel(tf.keras.Model):
             model=None
             weights = 'imagenet' if pretrained else None
             if model_type == 0:
-                model=SwinTransformer2(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
+                model = SwinTransformer( model_name='swin_tiny_224', num_classes=1000,
+                                         include_top=False, pretrained=pretrained)
+                #model=SwinTransformer2(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
 
             if model_type == 1:
                 model=SwinTransformer3(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
@@ -646,6 +653,7 @@ class ECA(tf.keras.layers.Layer):
             gamma=2,
             b=2,
             kernel=None,
+            grad=1,
             **kwargs):
 
         super(ECA, self).__init__()
@@ -654,6 +662,7 @@ class ECA(tf.keras.layers.Layer):
         self.b = b
         self.gamma=gamma
         self.kernel=kernel
+        self.grad=grad
 
     def build(self, input_shapes):
 
@@ -676,13 +685,23 @@ class ECA(tf.keras.layers.Layer):
     def compute_output_shape(self, input_shape):
         return input_shape
 
+    def gradient(self,x):
+        fd = tf.concat([x[:, 1:, :], tf.expand_dims(x[:, -1, :], -1)], -2)
+        bd = tf.concat([tf.expand_dims(x[:, 0, :], -1), x[:, :-1:, :]], -2)
+        d = tf.concat([fd, bd], -1)
+        d = tf.reduce_mean(d, -1,keepdims=True)
+
+        return d
+
     def call(self, x):
 
         # (B, C, 1)
         attn = tf.math.reduce_mean(x, [-3, -2])[:, :,tf.newaxis]
+        for i in range(self.grad):
+            attn=self.gradient(attn)
+
         # (B, C, 1)
         attn = self.eca_conv(attn)
-
         # (B, 1, 1, C)
         attn=tf.transpose(attn, [0, 2, 1])
         attn = tf.expand_dims(attn, -3)
@@ -691,6 +710,65 @@ class ECA(tf.keras.layers.Layer):
         attn = tf.math.sigmoid(attn)
 
         return x * attn
+
+
+class FNetEncoder(tf.keras.layers.Layer):
+    def __init__(self, embed_dim, dense_dim, **kwargs):
+        super(FNetEncoder, self).__init__(**kwargs)
+        self.embed_dim = embed_dim
+        self.dense_dim = dense_dim
+        self.dense_proj = tf.keras.Sequential(
+            [
+                Dense(dense_dim, activation="relu"),
+                Dense(embed_dim),
+            ]
+        )
+        self.layernorm_1 = LayerNormalization()
+        self.layernorm_2 = LayerNormalization()
+
+    def call(self, inputs):
+        # (B, C, 1)
+        #inputs = tf.math.reduce_mean(x, [-3, -2])[:,tf.newaxis, : ]
+        # Casting the inputs to complex64
+        inp_complex = tf.cast(inputs, tf.complex64)
+        # Projecting the inputs to the frequency domain using FFT2D and
+        # extracting the real part of the output
+        fft = tf.math.real(tf.signal.fft3d(inp_complex))
+        proj_input = self.layernorm_1(inputs + fft)
+        proj_output = tf.math.reduce_mean(proj_input, [-3, -2])
+        proj_output = self.dense_proj(proj_output)
+        proj_output=proj_output[:,tf.newaxis,tf.newaxis, : ]
+        fout=self.layernorm_2(proj_input + proj_output)
+        return fout
+
+class FNetEncoder_1d(tf.keras.layers.Layer):
+    def __init__(self, embed_dim, dense_dim, **kwargs):
+        super(FNetEncoder_1d, self).__init__(**kwargs)
+        self.embed_dim = embed_dim
+        self.dense_dim = dense_dim
+        self.dense_proj = tf.keras.Sequential(
+            [
+                Dense(dense_dim, activation="relu"),
+                Dense(embed_dim),
+            ]
+        )
+        self.layernorm_1 = LayerNormalization()
+        self.layernorm_2 = LayerNormalization()
+
+    def call(self, x):
+        # (B, C, 1)
+        inputs = tf.math.reduce_mean(x, [-3, -2])[:,tf.newaxis, : ]
+        # Casting the inputs to complex64
+        inp_complex = tf.cast(inputs, tf.complex64)
+        # Projecting the inputs to the frequency domain using FFT2D and
+        # extracting the real part of the output
+        fft = tf.math.real(tf.signal.fft(inp_complex))
+        proj_input = self.layernorm_1(inputs + fft)
+        proj_output = self.dense_proj(proj_input)
+        fout=self.layernorm_2(proj_input + proj_output)
+        fout = tf.expand_dims(fout, -3)
+        return x * fout
+
 
 
 class ChannelGate(tf.keras.layers.Layer):
