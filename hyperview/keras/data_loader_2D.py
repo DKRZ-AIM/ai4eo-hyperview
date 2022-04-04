@@ -44,8 +44,8 @@ class DataGenerator():
         eval_files = DataGenerator._load_data(eval_dir)
         eval_labels=np.zeros(eval_files.shape)
 
-        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,image_shape,ext_aug=False,stats=self.train_stats)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,image_shape,ext_aug=False,stats=self.train_stats)
+        self.train_reader = DataGenerator._get_data_reader(train_files,train_labels,batch_size,tr_trans,image_shape,ext_aug=True,stats=self.train_stats)
+        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels,batch_size, val_trans,image_shape,ext_aug=True,stats=self.train_stats)
         self.evalid_reader = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, eval_trans,image_shape,ext_aug=False, stats=self.train_stats)
         self.test_reader = DataGenerator._get_data_reader(test_files, test_labels, batch_size, eval_trans,image_shape,ext_aug=False,stats=self.eval_stats)
         self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels,batch_size, eval_trans,image_shape,ext_aug=False,eval=True,stats=self.eval_stats)
@@ -148,16 +148,22 @@ class DataGenerator():
 
     @staticmethod
     def _deparse_single_image(filename, label, target_shape,ext_aug=True):
+        import random
         def _read_npz(filename):
             with np.load(filename.numpy()) as npz:
                 image = npz['data']
                 mask = (1 - npz['mask'].astype(int))
-                image = (image * mask)
+                if ext_aug:
+                    if random.choice([True, False]):
+                        image = (image * mask)
+                else:
+                    image = (image * mask)
+
                 sh=image.shape[1:]
                 max_edge = np.max(sh)
                 min_edge = np.min(sh) #AUGMENT BY SHAPE
                 flag=True
-                if ext_aug:
+                if False: #ext_aug:
                     if min_edge>32:
                         x = np.random.randint(sh[0]+1 - min_edge)
                         y = np.random.randint(sh[1]+1 - min_edge)
