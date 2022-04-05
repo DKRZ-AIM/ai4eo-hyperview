@@ -69,7 +69,7 @@ def load_data(directory: str):
             datalist.append(data)
             masklist.append(mask)
 
-    return datalist,masklist
+    return datalist, masklist
 
 def load_gt(file_path: str):
     """Load labels for train set from the ground truth file.
@@ -141,22 +141,59 @@ def mixing_augmentation(X, y, fract=0.1):
 
     return np.concatenate([X, ma_X], 0), np.concatenate([y, ma_y], 0)
 
+def evaluation_score(args, y_v, y_hat, y_b, cons):
+    score = 0
+    for i in range(len(args.col_ix))
+        print(f'Soil idx {i} / ({len(args.col_ix)}')
+        mse_rf = mean_squared_error(y_v[:, i]*cons[i], y_hat[:, i]*cons[i])
+        mse_bl = mean_squared_error(y_v[:, i]*cons[i], y_b[:, i]*cons[i])
+
+        score += mse_rf / mse_bl
+
+        print(f'Baseline MSE:      {mse_bl:.2f}')
+        print(f'Random Forest MSE: {mse_rf:.2f} ({1e2*(mse_rf - mse_bl)/mse_bl:+.2f} %)')
+        print(f'Evaluation score: {score/len(args.ix)}')
+    
+    return score / 4       
+
+def predictions(random_forests, X_test, cons):
+    for rf in random_forests:
+        pp = rf.predict(X_test)
+        predictions.append(pp)
+
+    predictions = np.asarray(predictions)
+    predictions = np.mean(predictions, axis=0)
+    predictions = predictions * np.array(cons[:len(args.col_ix])
+
+    # only make submission file, if all 4 soil parameters are considered
+    if args.col_ix == 4:
+        submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
+        submission.to_csv("submission.csv", index_label="sample_index")
+        return predictions, submission
+    
+    return predictions
+
 def main(args):
     
-    train_data = os.path.join(args.in_data, "train_gt.csv")
-   
+    train_data = os.path.join(args.train_data, "train_gt.csv")
+    test_data = os.path.join(args.test_data, "test_gt.csv")
+    
     # load the data
     start_time = time.time()
     X_train, M_train = load_data(train_data)
+    X_test, M_test = load_data(test_data)
     y_train = load_gt(os.path.join(args.in_data, "train_gt.csv"))
 
-    print(f"loading trainig data took {time.time() - start_time:.2f}s")
-    print(f"data size: {len(X_train)}")
+    print(f"loading train and test data took {time.time() - start_time:.2f}s")
+    print(f"train data size: {len(X_train)}")
+    print(f"test data size: {len(X_test)}")
     print(f"patch size examples: {X_train[0].shape}, {X_train[1].shape}, {X_train[2].shape}")
     
     # selected set of labels
     y_train_col = y_train[:, args.col_ix]
 
+    cons = np.array([325.0, 625.0, 400.0, 7.8])
+    
     # training
     kfold = KFold(nsplits=args.folds, shuffle=True, random_state=RANDOM_STATE)
     
@@ -164,8 +201,9 @@ def main(args):
     baseline_regressors = []
     y_hat_bl = []
     y_hat_rf = []
+    scores = []
 
-    for ix_train, ix_valid in kfold.split(np.arange(0, len8y_train))):
+    for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len8y_train)))):
 
         X_t = X_processed[ix_train]
         y_t = y_train_col[ix_train]
@@ -183,7 +221,7 @@ def main(args):
         baseline_regresors.append(baseline)
 
         # random forest
-        rf = RandomForestRegressor(n_estimators=1000, n_jobs=-1, criterion="mse")
+        rf = RandomForestRegressor(n_estimators=args.n_estimators, n_jobs=-1, criterion="mse")
         rf.fit(X_t, y_t)
         print(f'Random Forest score: {rf.score(X_v, y_v)}')
 
@@ -195,8 +233,31 @@ def main(args):
         y_hat_rf.append(y_hat)
 
         # evaluation score
+        score = evaluation_score(args, y_v, y_hat, y_b, cons):
+        scores.append(score)
+        print(scores)
 
-    # save the model
+        # save the model
+        if args.save_model:
+            output_file = f"RF_n_est={args.n_estimators}_fold={i}.bin"
+            
+            with open(output_file, "wb") as f_out:
+                pickle.dump(rf, f_out)
+ 
+    # prepare submission
+    X_test, M_test = load_data(test_data)
+    X_test = preprocess(X_test, M_test)
+    
+    if args.col_ix == 4:
+        predictions, submission = predictions(random_forests, X_test, cons)
+    else:
+        predictions = predictions(random_forests, X_test, cons)
+
+    # save predictions
+    if args.save_pred:
+        pass
+
+       
 
 if __name__ == "__main__":
 
@@ -205,13 +266,17 @@ if __name__ == "__main__":
     np.random.seed(RANDOM_STATE)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--in_data', type=str, default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/train_data')
+    parser.add_argument('--train_data', type=str, default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/train_data')
+    parser.add_argument('--test_data', type=str, default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/test_data')
+    parser.add_argument('--save_pred', action='store_true', default=False)
+    parser.add_argument('--save_model', action='store_true', default=False)
     parser.add_argument('--col_ix', type=int, nargs='+', default=[0, 1, 2, 3])
     parser.add_argument('--folds', type=int, default=5)
     parser.add_argument('--mix_aug', action='store_true', default=False)
+    # model hyperparams
+    parser.add_argument('--n_estimators', type=int, default=1000)
 
     args = parser.parse_args()
-    
 
     cols = ["P205", "K", "Mg", "pH"]
 
