@@ -8,7 +8,6 @@ import random
 import time
 import argparse
 from tqdm.auto import tqdm
-import pprint
 
 from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestRegressor
@@ -306,9 +305,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     print('BEGIN argparse key - value pairs')
-    pp = pprint.PrettyPrinter(indent=4)
     for key, value in vars(args).items():
-        pp.pprint(f'{key}: {value}')
+        print(f'{key}: {value}')
     print('END argparse key - value pairs')
     print()
 
