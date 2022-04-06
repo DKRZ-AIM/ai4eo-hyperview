@@ -67,7 +67,7 @@ class DataGenerator():
         dataset = tf.data.Dataset.from_tensor_slices((files,labels))
         dataset = dataset.interleave(lambda x,y: DataGenerator._deparse_single_image(x, y,image_shape,ext_aug),cycle_length=batch_size,num_parallel_calls=tf.data.AUTOTUNE)
         if not eval:
-            dataset = dataset.shuffle(buffer_size=len(files), reshuffle_each_iteration=True)
+            dataset = dataset.shuffle(buffer_size=int(len(files)/4), reshuffle_each_iteration=True)
         dataset = dataset.map(partial(DataGenerator._trans_single_image, transform=transform,eval=eval,stats=stats),num_parallel_calls=tf.data.AUTOTUNE)
         dataset = dataset.batch(batch_size, drop_remainder=False,num_parallel_calls=tf.data.AUTOTUNE).prefetch(tf.data.AUTOTUNE)
 
