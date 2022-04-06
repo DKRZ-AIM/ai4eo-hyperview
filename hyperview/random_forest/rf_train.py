@@ -180,7 +180,7 @@ def predictions_and_submission(random_forests, X_test, cons, args):
     if len(args.col_ix) == 4:
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
-        submission.to_csv(f"submission_rf_n_est={args.n_estimators}.csv", index_label="sample_index")
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_rf_n_est={args.n_estimators}.csv"), index_label="sample_index")
         return predictions, submission
     
     return predictions
@@ -262,7 +262,7 @@ def main(args):
         if args.save_model:
             output_file = f"rf_n_est={args.n_estimators}_fold={i}.bin"
             
-            with open(output_file, "wb") as f_out:
+            with open(os.path.join(args.model_dir.models, output_file), "wb") as f_out:
                 pickle.dump(rf, f_out)
     
     print("END TRAINING")
@@ -294,13 +294,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--in-data', type=str, default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/')
+    parser.add_argument('--submission-dir', type=str, default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/submissions')
+    parser.add_argument('--model-dir', type=str, default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/models')
     parser.add_argument('--save-pred', action='store_true', default=False)
-    parser.add_argument('--save_model', action='store_true', default=False)
+    parser.add_argument('--save-model', action='store_true', default=False)
     parser.add_argument('--col-ix', type=int, nargs='+', default=[0, 1, 2, 3])
     parser.add_argument('--folds', type=int, default=5)
-    parser.add_argument('--mix_aug', action='store_true', default=False)
+    parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
-    parser.add_argument('--n_estimators', type=int, default=1000)
+    parser.add_argument('--n-estimators', type=int, default=1000)
 
     args = parser.parse_args()
 
