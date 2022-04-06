@@ -59,8 +59,8 @@ def main():
 
 
     model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
-    train_model(model, dataset, experiment_log, warmup=True)
-    model.load_weights('{}_model_best.h5'.format(experiment_log))
+    #train_model(model, dataset, experiment_log, warmup=True)
+    #model.load_weights('{}_model_best.h5'.format(experiment_log))
     train_model(model, dataset, experiment_log, warmup=False)
     model.load_weights('{}_model_best.h5'.format(experiment_log))
     evaluate_model(model, dataset)
