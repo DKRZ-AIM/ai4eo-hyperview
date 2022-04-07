@@ -31,7 +31,7 @@ cd $codedir
 PYTHONPATH=$PYTHONPATH:"$codedir"
 export PYTHONPATH
 
-python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --debug
+python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --n-trials 500
 
 EOF
 

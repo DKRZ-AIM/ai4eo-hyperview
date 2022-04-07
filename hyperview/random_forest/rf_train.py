@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import random
 import time
+from datetime import datetime
 import argparse
 from tqdm.auto import tqdm
 
@@ -15,6 +16,8 @@ from sklearn.metrics import mean_squared_error
 
 import joblib
 import optuna
+
+import sys
 
 class BaselineRegressor():
     """
@@ -183,19 +186,26 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     optimised_rf = RandomForestRegressor(n_estimators=study.best_params['n_estimators'], n_jobs=-1, criterion="squared_error")
     optimised_rf.fit(X_processed, y_train_col)
     predictions = optimised_rf.predict(X_test)
-
+    
+    # save the model
+    if args.save_model:
+        output_file = os.path.join(args.model_dir, f"rf_{date_time}_n_est={args.n_estimators}.bin")
+            
+        with open(output_file, "wb") as f_out:
+            joblib.dump(optimised_rf, f_out)
 
     # only make submission file, if all 4 soil parameters are considered
     if len(args.col_ix) == 4:
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
-        submission.to_csv(os.path.join(args.submission_dir, f"submission_rf_n_est={study.best_params['n_estimators']}.csv"), index_label="sample_index")
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_rf_{date_time}_n_est={study.best_params['n_estimators']}.csv"), index_label="sample_index")
         return predictions, submission
     
     return predictions
 
 def main(args):
     
+
     train_data = os.path.join(args.in_data, "train_data", "train_data")
     test_data = os.path.join(args.in_data, "test_data")
     
@@ -222,7 +232,8 @@ def main(args):
     cons = np.array([325.0, 625.0, 400.0, 7.8])
    
     def objective(trial):
-
+        
+        print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
         kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
     
@@ -281,16 +292,9 @@ def main(args):
         # best models
         if mean_score < final_score:
             final_score = mean_score
-            optimised_forests = random_forests
+            trial = trial.number
 
-        # save the model
-        if args.save_model:
-            output_file = f"rf_n_est={args.n_estimators}_fold={i}.bin"
-            
-            with open(os.path.join(args.model_dir.models, output_file), "wb") as f_out:
-                pickle.dump(rf, f_out)
-        
-        print(f'final score {final_score}\n')
+        print(f'final score {final_score} from trial {trial}\n')
         
         return mean_score
     
@@ -298,7 +302,7 @@ def main(args):
     study.optimize(objective, n_trials=args.n_trials)
     
     # save study
-    output_file = os.path.join(args.submission_dir, f"study_rf_n_est={study.best_params['n_estimators']}.pkl")
+    output_file = os.path.join(args.submission_dir, f"study_rf_{date_time}_n_est={study.best_params['n_estimators']}.pkl")
     with open(output_file, "wb") as f_out:
         joblib.dump(study, f_out)
 
@@ -317,13 +321,15 @@ def main(args):
     if args.save_pred:
         pass
 
-       
 
 if __name__ == "__main__":
 
     RANDOM_STATE = 42
     random.seed(RANDOM_STATE)
     np.random.seed(RANDOM_STATE)
+    
+    now = datetime.now()
+    date_time = now.strftime("%Y%m%d%H%M%S")
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False)
@@ -341,6 +347,9 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    output = os.path.join(args.submission_dir, f"out_{date_time}_n_est={args.n_estimators}")
+    sys.stdout = open(output, 'w')
+    
     print('BEGIN argparse key - value pairs')
     for key, value in vars(args).items():
         print(f'{key}: {value}')
@@ -350,3 +359,5 @@ if __name__ == "__main__":
     cols = ["P205", "K", "Mg", "pH"]
 
     main(args)
+
+    sys.stdout.close()
