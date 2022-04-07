@@ -52,24 +52,29 @@ class DataGenerator():
         train_files, valid_files, train_labels, valid_labels = train_test_split(train_files, train_labels,test_size=valid_size, random_state=42)
 
         eval_files = DataGenerator._load_data(eval_dir)
-        eval_labels = np.zeros(eval_files.shape)
+        eval_labels = np.zeros((len(eval_files),train_labels.shape[-1]))
 
-        self.train_reader = DataGenerator._get_data_reader(train_files, train_labels, batch_size, tr_trans, image_shape,
-                                                        ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=True)
-        self.valid_reader = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, val_trans,
-                                                        image_shape, ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=True)
-        self.evalid_reader = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, eval_trans,
-                                                         image_shape, ext_aug=False,eval=False, stats=self.train_stats, self_supervised=self_supervised,drop_reminder=True,preload=False)
+        if self_supervised:
+            train_files=np.concatenate([train_files,eval_files])
+            train_labels = np.concatenate([train_labels, eval_labels])
 
-        self.eval_reader = DataGenerator._get_data_reader(eval_files, eval_labels, 1, eval_trans, image_shape,
-                                                       ext_aug=False, eval=True, stats=self.eval_stats,self_supervised=self_supervised,drop_reminder=False,preload=False)
+        self.train_reader, self.train_len = DataGenerator._get_data_reader(train_files, train_labels, batch_size, tr_trans, image_shape,ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=False)
+        self.valid_reader,self.valid_len = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, val_trans,image_shape, ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=False)
 
-        self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader)
+        if not self_supervised:
+            self.evalid_reader,self.evalid_len = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, eval_trans,image_shape, ext_aug=False,eval=False, stats=self.train_stats, self_supervised=self_supervised,drop_reminder=True,preload=False)
+            self.eval_reader,self.eval_len = DataGenerator._get_data_reader(eval_files, eval_labels, 1, eval_trans, image_shape,ext_aug=False, eval=True, stats=self.eval_stats,self_supervised=self_supervised,drop_reminder=False,preload=False)
+
+        self.image_shape, self.label_shape = DataGenerator._get_dataset_features(self.valid_reader,self_supervised=self_supervised)
 
     @staticmethod
-    def _get_dataset_features(reader):
+    def _get_dataset_features(reader,self_supervised):
         for feature, mask in reader:
-            image_shape = tuple([1, feature.shape[-3], feature.shape[-2], feature.shape[-1]])
+        #for feature, mask, in reader.take(1):
+            if self_supervised:
+                image_shape = tuple([1, feature[0].shape[-3], feature[0].shape[-2], feature[0].shape[-1]])
+            else:
+                image_shape = tuple([1, feature.shape[-3], feature.shape[-2], feature.shape[-1]])
             label_shape = mask.shape[-1]
             return image_shape, label_shape,
 
@@ -82,21 +87,38 @@ class DataGenerator():
            :return: returns one of the generator type
           '''
         gen = DataReader(train_files, train_labels, batch_size, tr_trans, image_shape,ext_aug,eval, stats,self_supervised,drop_reminder,preload)
+        gen_len=len(gen)
+
         if True:
-            gen = DataGenerator.multi_generator(gen)
-        return gen
+            gen = DataGenerator.multi_generator(gen,self_supervised,eval)
+        return gen,gen_len
 
     @staticmethod
-    def multi_generator(data_gen):
+    def multi_generator(data_gen,self_supervised,eval):
         '''
         THIS FUNCTION CONVERTS DATA GENERATOR FOR MULTIPLE GPU COMPATIBILITY.
         :param data_gen: 'train', 'valid' or 'test' generator
         :return: returns the generator with multi-gpu distribution policy
         '''
-        dataset = tf.data.Dataset.from_generator(data_gen.generator,
+
+        if not self_supervised:
+            if not eval:
+                dataset = tf.data.Dataset.from_generator(data_gen.generator,
                                                  output_types=(tf.float64, tf.float64),
                                                  output_shapes=(tf.TensorShape([None, None,None, None, None]),
-                                                                tf.TensorShape([None, None])))
+                                                                tf.TensorShape([None, None]))).take(data_gen.__len__())
+            else:
+                dataset = tf.data.Dataset.from_generator(data_gen.generator,
+                                                         output_types=(tf.float64, tf.float64,tf.string),
+                                                         output_shapes=(tf.TensorShape([None, None, None, None, None]),
+                                                                        tf.TensorShape([None, None]),tf.TensorShape([None]))).take(data_gen.__len__())
+
+        else:
+            dataset = tf.data.Dataset.from_generator(data_gen.generator,
+                                                     output_types=((tf.float64,tf.float64), tf.float64),
+                                                     output_shapes=((tf.TensorShape([None, None, None, None, None]),tf.TensorShape([None, None, None, None, None])),
+                                                                    tf.TensorShape([None, None]))).take(data_gen.__len__())
+
         options = tf.data.Options()
         options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
         return dataset.with_options(options)
@@ -186,7 +208,7 @@ class DataReader(Sequence):
             self.mask_preloaded=np.arange(len(files))
 
 
-        self.on_epoch_end()
+        #self.on_epoch_end()
 
     def on_epoch_end(self):
         '''THIS FUNCTION UPDATES THE INDEXES AFTER EACH EPOCH.'''
@@ -228,6 +250,7 @@ class DataReader(Sequence):
             start=0
             end=self.batch_size
             if not self.self_supervised:  # IF STANDARD SUPERVISED LEARNING, RETURNS ONLY IMAGE AND MASK PAIRS
+
                 X = np.empty((self.batch_size, 1, *self.image_shape, 150))
                 Y = np.empty((self.batch_size, *self.label_shape))
                 lab = [None] * self.batch_size
@@ -250,7 +273,7 @@ class DataReader(Sequence):
                     end += self.batch_size
             else:
                 X = np.empty((self.batch_size, 1, *self.image_shape, 150))
-                Y = np.empty((self.batch_size, 1, *self.image_shape), 150)
+                Y = np.empty((self.batch_size, 1, *self.image_shape, 150))
                 z = np.empty((self.batch_size, 1))
                 while start < self.__len__():
                     indexes = self.indexes[start:end]
@@ -262,7 +285,7 @@ class DataReader(Sequence):
                         X[i + len(indexes) // 2, 0,] = self._deparse_single_image(self.data_preloaded[ID],self.mask_preloaded[ID],self.files[ID])
                         Y[len(indexes) - i - 1, 0,] = self._deparse_single_image(self.data_preloaded[ID],self.mask_preloaded[ID],self.files[ID])
                         z[i + len(indexes) // 2,] = 1  # HALF OF THE BATCH IS PREPARED WITH THE DIFFERENT AUGMENTATION VIEWS OF THE DIFFERENT IMAGES
-                    yield [X, Y], z
+                    yield (X, Y), z
                     start += self.batch_size
                     end += self.batch_size
 
@@ -289,7 +312,7 @@ class DataReader(Sequence):
                 return X, Y
         else: # IF SELF SUPERVISED LEARNING
             X = np.empty((self.batch_size,1, *self.image_shape,150))
-            Y = np.empty((self.batch_size,1, *self.image_shape),150)
+            Y = np.empty((self.batch_size,1, *self.image_shape,150))
             z = np.empty((self.batch_size, 1))
             for i, ID in enumerate(indexes[:len(indexes)//2]):
                 X[i,0,]= self._deparse_single_image(self.data_preloaded[ID],self.mask_preloaded[ID],self.files[ID])
@@ -316,11 +339,11 @@ class DataReader(Sequence):
             with np.load(file) as npz:
                 data = npz['data']
                 mask = (1 - npz['mask'].astype(int))
-        #if self.ext_aug:
-        #    if random.choice([True, False]):
-        #        data = (data * mask)
-        #else:
-        data = (data * mask)
+        if self.ext_aug and self.self_supervised:
+            if random.choice([True, False]):
+                data = (data * mask)
+        else:
+            data = (data * mask)
 
         sh=data.shape[1:]
         max_edge = np.max(sh)
