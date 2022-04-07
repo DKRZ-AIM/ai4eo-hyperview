@@ -24,8 +24,8 @@ parser.add_argument('-c', '--channel-type', default=6, type=int, metavar='CT', h
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=32, type=int, metavar='BS', help='number of batch size (default: 32)')
-parser.add_argument('-w','--width', default=32, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
+parser.add_argument('-b','--batch-size', default=2, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-w','--width', default=128, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
 parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
@@ -112,7 +112,7 @@ def train_model(model, dataset, log_args, warmup=True):
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
         lossWeights = {"total": 1, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 0 }
-        model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=True)
+        model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
                 ReduceLROnPlateau(verbose=1, patience=6),
@@ -231,14 +231,13 @@ def print_history(history, type, file_name):
     plt.grid(True)
     fig.savefig(file_name, dpi=fig.dpi)
 
-#@tf.function
+
 def custom_mse(idx=None):
     y_base_fact = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
-    #@tf.function
+    @tf.function
     def mse_1(y_true,y_pred):
         y_base = tf.constant(y_base_fact, dtype=tf.float32)
         if idx is not None:
-
             y_true=y_true[:,idx]
             y_base = y_base[idx]
 
@@ -246,11 +245,7 @@ def custom_mse(idx=None):
         loss_base = K.mean(K.square(y_true - y_base), 0)
         loss=tf.math.divide(loss_raw, loss_base)
         return loss
-
     return mse_1
-
-
-
 
 
 if __name__ == '__main__':
