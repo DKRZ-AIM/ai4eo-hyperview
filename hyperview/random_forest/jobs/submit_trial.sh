@@ -22,4 +22,4 @@ datadir=/mnt/lustre02/work/ka1176/shared_data/2022-ai4eo_hyperview
 PYTHONPATH=$PYTHONPATH:"$codedir"
 export PYTHONPATH
 
-python $codedir/random_forest/rf_train.py --in-data $datadir --submission-dir $codedir/random_forest/submissions
+python3 $codedir/random_forest/rf_train.py --in-data $datadir --submission-dir $codedir/random_forest/submissions 

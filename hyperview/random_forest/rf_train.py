@@ -6,12 +6,18 @@ import numpy as np
 import pandas as pd
 import random
 import time
+from datetime import datetime
 import argparse
 from tqdm.auto import tqdm
 
 from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
+
+import joblib
+import optuna
+
+import sys
 
 class BaselineRegressor():
     """
@@ -166,27 +172,40 @@ def evaluation_score(args, y_v, y_hat, y_b, cons):
     
     return score / 4       
 
-def predictions_and_submission(random_forests, X_test, cons, args):
-    predictions = []
-    for rf in random_forests:
-        pp = rf.predict(X_test)
-        predictions.append(pp)
+def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args):
+    #predictions = []
+    #for rf in random_forests:
+    #    pp = rf.predict(X_test)
+    #    predictions.append(pp)
 
-    predictions = np.asarray(predictions)
-    predictions = np.mean(predictions, axis=0)
-    predictions = predictions * np.array(cons[:len(args.col_ix)])
+    #predictions = np.asarray(predictions)
+    #predictions = np.mean(predictions, axis=0)
+    #predictions = predictions * np.array(cons[:len(args.col_ix)])
+    
+    # fit rf with best parameters on entire training data 
+    optimised_rf = RandomForestRegressor(n_estimators=study.best_params['n_estimators'], n_jobs=-1, criterion="squared_error")
+    optimised_rf.fit(X_processed, y_train_col)
+    predictions = optimised_rf.predict(X_test)
+    
+    # save the model
+    if args.save_model:
+        output_file = os.path.join(args.model_dir, f"rf_{date_time}_n_est={args.n_estimators}.bin")
+            
+        with open(output_file, "wb") as f_out:
+            joblib.dump(optimised_rf, f_out)
 
     # only make submission file, if all 4 soil parameters are considered
     if len(args.col_ix) == 4:
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
-        submission.to_csv(os.path.join(args.submission_dir, f"submission_rf_n_est={args.n_estimators}.csv"), index_label="sample_index")
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_rf_{date_time}_n_est={study.best_params['n_estimators']}.csv"), index_label="sample_index")
         return predictions, submission
     
     return predictions
 
 def main(args):
     
+
     train_data = os.path.join(args.in_data, "train_data", "train_data")
     test_data = os.path.join(args.in_data, "test_data")
     
@@ -205,91 +224,112 @@ def main(args):
     print(f"loading test data took {time.time() - start_time:.2f}s")
     print(f"test data size: {len(X_test)}\n")
     
+    print('Preprocess training data...')
+    X_processed = preprocess(X_train, M_train)
     # selected set of labels
     y_train_col = y_train[:, args.col_ix]
 
     cons = np.array([325.0, 625.0, 400.0, 7.8])
-    
-    # training
-    kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
-    
-    random_forests = []
-    baseline_regressors = []
-    y_hat_bl = []
-    y_hat_rf = []
-    scores = []
-
-    print("START TRAINING ...")
-    for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(y_train)))):
+   
+    def objective(trial):
         
-        print(f'fold {i}:')
-        X_processed = preprocess(X_train, M_train)
-
-        X_t = X_processed[ix_train]
-        y_t = y_train_col[ix_train]
-        
-        # mixing augmentation
-        if args.mix_aug:
-            X_t, y_t = mixing_augmentation(X_t, y_t)
-
-        X_v = X_processed[ix_valid]
-        y_v = y_train_col[ix_valid]
-
-        # baseline
-        baseline = BaselineRegressor()
-        baseline.fit(X_t, y_t)
-        baseline_regressors.append(baseline)
-
-        # random forest
-        rf = RandomForestRegressor(n_estimators=args.n_estimators, n_jobs=-1, criterion="squared_error")
-        rf.fit(X_t, y_t)
-        random_forests.append(rf)
-        print(f'Random Forest score: {rf.score(X_v, y_v)}')
-
-        # predictions
-        y_hat = rf.predict(X_v)
-        y_b = baseline.predict(X_v)
-
-        y_hat_bl.append(y_b)
-        y_hat_rf.append(y_hat)
-
-        # evaluation score
-        score = evaluation_score(args, y_v, y_hat, y_b, cons)
-        scores.append(score)
-        print(scores)
-
-        # save the model
-        if args.save_model:
-            output_file = f"rf_n_est={args.n_estimators}_fold={i}.bin"
-            
-            with open(os.path.join(args.model_dir.models, output_file), "wb") as f_out:
-                pickle.dump(rf, f_out)
+        print(f"\nTRIAL NUMBER: {trial.number}\n")
+        # training
+        kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
     
-    print("END TRAINING")
-    # final score
-    print(f'mean score: {np.mean(np.array(scores))}\n')
+        random_forests = []
+        baseline_regressors = []
+        y_hat_bl = []
+        y_hat_rf = []
+        scores = []
+        final_score = np.inf
+
+        print("START TRAINING ...")
+        for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(y_train)))):
+        
+            print(f'fold {i}:')
+
+            X_t = X_processed[ix_train]
+            y_t = y_train_col[ix_train]
+        
+            # mixing augmentation
+            if args.mix_aug:
+                X_t, y_t = mixing_augmentation(X_t, y_t)
+
+            X_v = X_processed[ix_valid]
+            y_v = y_train_col[ix_valid]
+
+            # baseline
+            baseline = BaselineRegressor()
+            baseline.fit(X_t, y_t)
+            baseline_regressors.append(baseline)
+
+            n_estimators =  trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1])
+
+            # random forest
+            rf = RandomForestRegressor(n_estimators=n_estimators, n_jobs=-1, criterion="squared_error")
+            rf.fit(X_t, y_t)
+            random_forests.append(rf)
+            print(f'Random Forest score: {rf.score(X_v, y_v)}')
+
+            # predictions
+            y_hat = rf.predict(X_v)
+            y_b = baseline.predict(X_v)
+
+            y_hat_bl.append(y_b)
+            y_hat_rf.append(y_hat)
+
+            # evaluation score
+            score = evaluation_score(args, y_v, y_hat, y_b, cons)
+            scores.append(score)
+            print(scores)
+    
+        print("END TRAINING")
+        # final score
+        mean_score = np.mean(np.array(scores))
+        print(f'mean score: {mean_score}\n')
+        
+        # best models
+        if mean_score < final_score:
+            final_score = mean_score
+            trial = trial.number
+
+        print(f'final score {final_score} from trial {trial}\n')
+        
+        return mean_score
+    
+    study = optuna.create_study(direction='minimize')
+    study.optimize(objective, n_trials=args.n_trials)
+    
+    # save study
+    output_file = os.path.join(args.submission_dir, f"study_rf_{date_time}_n_est={study.best_params['n_estimators']}.pkl")
+    with open(output_file, "wb") as f_out:
+        joblib.dump(study, f_out)
 
     # prepare submission
     print("MAKE PREDICTIONS AND PREPARE SUBMISSION")
+    print('preprocess test data ...')
     X_test = preprocess(X_test, M_test)
     
     if args.col_ix == 4:
-        predictions, submission = predictions_and_submission(random_forests, X_test, cons, args)
+        predictions, submission = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
     else:
-        predictions = predictions_and_submission(random_forests, X_test, cons, args)
+        predictions = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
     print("PREDICTIONS AND SUBMISSION FINISHED")
 
     # save predictions
     if args.save_pred:
         pass
 
-       
 
 if __name__ == "__main__":
 
     RANDOM_STATE = 42
     random.seed(RANDOM_STATE)
     np.random.seed(RANDOM_STATE)
+    
+    now = datetime.now()
+    date_time = now.strftime("%Y%m%d%H%M%S")
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False)
@@ -302,10 +342,14 @@ if __name__ == "__main__":
     parser.add_argument('--folds', type=int, default=5)
     parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
-    parser.add_argument('--n-estimators', type=int, default=1000)
+    parser.add_argument('--n-estimators', type=int, nargs='+', default=[500, 1000])
+    parser.add_argument('--n-trials', type=int, default=200)
 
     args = parser.parse_args()
 
+    output = os.path.join(args.submission_dir, f"out_{date_time}_n_est={args.n_estimators}")
+    sys.stdout = open(output, 'w')
+    
     print('BEGIN argparse key - value pairs')
     for key, value in vars(args).items():
         print(f'{key}: {value}')
@@ -315,3 +359,5 @@ if __name__ == "__main__":
     cols = ["P205", "K", "Mg", "pH"]
 
     main(args)
+
+    sys.stdout.close()
