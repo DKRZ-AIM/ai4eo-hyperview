@@ -63,7 +63,9 @@ def main():
     base_model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, 4, pretrained=args.pretrained)
 
     sim_model=SimCLR(base_model,dataset.image_shape)
-    train_clr_model(sim_model, dataset, experiment_log)
+    train_clr_model(sim_model, dataset, experiment_log, warmup=True)
+    sim_model.load_weights('{}_model_best_clr.h5'.format(experiment_log))
+    train_clr_model(sim_model, dataset, experiment_log, warmup=False)
     sim_model.load_weights('{}_model_best_clr.h5'.format(experiment_log))
     base_model.set_weights(sim_model.base_model.get_weights())
 
@@ -78,17 +80,21 @@ def main():
     create_submission(base_model, dataset, experiment_log)
 
 
-def train_clr_model(model, dataset, log_args):
+def train_clr_model(model, dataset, log_args,warmup):
     #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
     #with strategy.scope():
     print('\n\nTRAINING SESSION STARTED!\n\n')
-    for idx in range(len(model.submodules)):
-        if 'backbone_model' in model.submodules[idx].name:
-            model.submodules[idx].trainable = True
-            for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = True
-            model.trainable=True
-    learning_rate = args.learning_rate/10
-    num_epochs = ceil(args.num_epochs/5)
+    if warmup:
+        learning_rate = args.learning_rate / 10
+        num_epochs = ceil(args.num_epochs / 10)
+    else:
+        for idx in range(len(model.submodules)):
+            if 'backbone_model' in model.submodules[idx].name:
+                model.submodules[idx].trainable = True
+                for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = True
+        model.trainable=True
+        learning_rate = args.learning_rate
+        num_epochs = ceil(args.num_epochs/5)
 
 
     loss_function = {'contrastive': NTXent(args.temperature), 'binary': tf.keras.losses.BinaryCrossentropy()}
