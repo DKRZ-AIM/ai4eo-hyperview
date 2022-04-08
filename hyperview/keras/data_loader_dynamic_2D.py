@@ -58,8 +58,8 @@ class DataGenerator():
             train_files=np.concatenate([train_files,eval_files])
             train_labels = np.concatenate([train_labels, eval_labels])
 
-        self.train_reader, self.train_len = DataGenerator._get_data_reader(train_files, train_labels, batch_size, tr_trans, image_shape,ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=True)
-        self.valid_reader,self.valid_len = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, val_trans,image_shape, ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=True)
+        self.train_reader, self.train_len = DataGenerator._get_data_reader(train_files, train_labels, batch_size, tr_trans, image_shape,ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=False)
+        self.valid_reader,self.valid_len = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, val_trans,image_shape, ext_aug=True,eval=False, stats=self.train_stats,self_supervised=self_supervised,drop_reminder=True,preload=False)
 
         if not self_supervised:
             self.evalid_reader,self.evalid_len = DataGenerator._get_data_reader(valid_files, valid_labels, batch_size, eval_trans,image_shape, ext_aug=False,eval=False, stats=self.train_stats, self_supervised=self_supervised,drop_reminder=True,preload=False)
