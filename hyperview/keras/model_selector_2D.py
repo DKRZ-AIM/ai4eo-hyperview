@@ -190,7 +190,7 @@ class SpatioMultiChannellModel(tf.keras.Model):
         eca1 = ECA(kernel=5, grad=1)
         eca2 = ECA(kernel=5, grad=2)
 
-        fnet = FNetEncoder(150,150)
+        fnet = FNetEncoder(256,256)
         #multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1, 1), activation='relu'))
         con1 = Conv2D(filters=32, kernel_size=(1, 1), activation='relu')
         con2 = Conv2D(filters=32, kernel_size=(1, 1), activation='relu')
