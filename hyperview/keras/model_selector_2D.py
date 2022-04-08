@@ -165,8 +165,8 @@ class SpatioMultiChannellModel(tf.keras.Model):
 
         input = tf.squeeze(temporal_input, -4)
         multi_chanel_model = tf.keras.Sequential()
-        multi_chanel_model.add(Conv2D(filters=96, kernel_size=(1, 1)))
-        multi_chanel_model.add(ECA(kernel=5))
+        multi_chanel_model.add(Conv2D(filters=256, kernel_size=(1, 1)))
+        #multi_chanel_model.add(ECA(kernel=5))
         #multi_chanel_model.add(Conv2D(filters=16, kernel_size=(1,1)))
         #multi_chanel_model.add(ECA(kernel=3))
 
@@ -185,17 +185,17 @@ class SpatioMultiChannellModel(tf.keras.Model):
         input = tf.squeeze(temporal_input, -4)
         #multi_chanel_model = tf.keras.Sequential()
         #multi_chanel_model.add()
-        con0=Conv2D(filters=150, kernel_size=(1, 1))
+        con0=Conv2D(filters=256, kernel_size=(1, 1))
         eca0 = ECA(kernel=5, grad=0)
         eca1 = ECA(kernel=5, grad=1)
         eca2 = ECA(kernel=5, grad=2)
 
         fnet = FNetEncoder(150,150)
         #multi_chanel_model.add(Conv2D(filters=3, kernel_size=(1, 1), activation='relu'))
-        con1 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
-        con2 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
-        con3 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
-        con4 = Conv2D(filters=3, kernel_size=(1, 1), activation='relu')
+        con1 = Conv2D(filters=32, kernel_size=(1, 1), activation='relu')
+        con2 = Conv2D(filters=32, kernel_size=(1, 1), activation='relu')
+        con3 = Conv2D(filters=32, kernel_size=(1, 1), activation='relu')
+        con4 = Conv2D(filters=32, kernel_size=(1, 1), activation='relu')
 
         out = con0(input)
         out1 = con1(eca0(out))

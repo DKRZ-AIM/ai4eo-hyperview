@@ -20,7 +20,7 @@ tf.random.set_seed(2)
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=3, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=9, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('-c', '--channel-type', default=5, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
 parser.add_argument('-t','--temperature', default=0.1, type=float, metavar='TE', help='learning temperature (default: 1)')
@@ -63,8 +63,8 @@ def main():
     base_model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, 4, pretrained=args.pretrained)
 
     sim_model=SimCLR(base_model,dataset.image_shape)
-    #train_clr_model(sim_model, dataset, experiment_log, warmup=True)
-    #sim_model.load_weights('{}_model_best_clr.h5'.format(experiment_log))
+    train_clr_model(sim_model, dataset, experiment_log, warmup=True)
+    sim_model.load_weights('{}_model_best_clr.h5'.format(experiment_log))
     train_clr_model(sim_model, dataset, experiment_log, warmup=False)
     sim_model.load_weights('{}_model_best_clr.h5'.format(experiment_log))
     base_model.set_weights(sim_model.base_model.get_weights())

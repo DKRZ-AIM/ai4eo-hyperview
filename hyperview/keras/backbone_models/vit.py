@@ -60,7 +60,7 @@ class Transformer(layers.Layer):
 
 class ViT(keras.models.Model):
     def __init__(self, input_shape, include_top=True,classifier_activation=None,num_classes=1000,
-                 patch_size = 8, drop_rate=0.2, blocks=1, embedding_dim=256):
+                 patch_size = 8, drop_rate=0.2, blocks=2, embedding_dim=256):
 
         num_patches = (input_shape[-2] // patch_size) ** 2
 
