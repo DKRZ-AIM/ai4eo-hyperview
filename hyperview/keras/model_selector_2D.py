@@ -268,9 +268,9 @@ class BackboneModel(tf.keras.Model):
             model=None
             weights = 'imagenet' if pretrained else None
             if model_type == 0:
-                model = SwinTransformer2( model_name='swin_tiny_224', num_classes=1000,
+                #model = SwinTransformer( model_name='swin_tiny_224', num_classes=1000,
                                          include_top=False, pretrained=pretrained)
-                #model=SwinTransformer2(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
+                model=SwinTransformer3(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
 
             if model_type == 1:
                 model=SwinTransformer3(input_shape=input_shape,model_name='swin_tiny_224', num_classes=1000, include_top=False, pretrained=pretrained)
