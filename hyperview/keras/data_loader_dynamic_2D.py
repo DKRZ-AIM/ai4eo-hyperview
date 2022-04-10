@@ -325,7 +325,22 @@ class DataReader(Sequence):
             return [X, Y], z
 
     def _shape_pad(self,data, shape):
-        padded = np.pad(data,
+        if self.ext_aug and self.self_supervised:
+            if random.choice([True, False]):
+                padded = np.pad(data,
+                                ((0, 0),
+                                 (0, (shape[0] - data.shape[1])),
+                                 (0, (shape[1] - data.shape[2]))),
+                                'wrap')
+            else:
+                padded = np.pad(data,
+                                ((0, 0),
+                                 (0, (shape[0] - data.shape[1])),
+                                 (0, (shape[1] - data.shape[2]))),
+                                'constant', constant_values=0)
+
+        else:
+            padded = np.pad(data,
                         ((0, 0),
                          (0, (shape[0] - data.shape[1])),
                          (0, (shape[1] - data.shape[2]))),

@@ -6,5 +6,5 @@ scipy
 seaborn
 pyproj==2.6.0
 tensorflow==2.8.0
-tfa-nightlypip
+tfa-nightly
 albumentations==1.1.0
