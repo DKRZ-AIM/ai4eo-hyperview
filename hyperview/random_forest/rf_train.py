@@ -16,6 +16,7 @@ from sklearn.metrics import mean_squared_error
 
 import joblib
 import optuna
+from optuna.samplers import TPESampler
 
 import sys
 
@@ -183,13 +184,27 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     #predictions = predictions * np.array(cons[:len(args.col_ix)])
     
     # fit rf with best parameters on entire training data 
-    optimised_rf = RandomForestRegressor(n_estimators=study.best_params['n_estimators'], n_jobs=-1, criterion="squared_error")
+    optimised_rf = RandomForestRegressor(n_estimators=study.best_params['n_estimators'], 
+                                         max_depth=study.best_params['max_depth'],
+                                         min_samples_leaf=study.best_params['min_samples_leaf'],
+                                         n_jobs=-1, 
+                                         criterion="squared_error")
     optimised_rf.fit(X_processed, y_train_col)
     predictions = optimised_rf.predict(X_test)
     
+    # print feature importances
+    feats = {}
+    importances = optimised_rf.feature_importances_
+    feature_names=['arr','dXdl', 'd2Xdl2', 's_0', 's_1', 's_3', 's_4', 'real', 'imag']
+    for feature, importance in zip(feature_names, importances):
+        feats[feature] = importance
+    feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
+    for feat in feats:
+        print(f'{feat[0]}: {feat[1]}')
+
     # save the model
     if args.save_model:
-        output_file = os.path.join(args.model_dir, f"rf_{date_time}_n_est={args.n_estimators}.bin")
+        output_file = os.path.join(args.model_dir, f"rf_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.bin")
             
         with open(output_file, "wb") as f_out:
             joblib.dump(optimised_rf, f_out)
@@ -198,7 +213,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     if len(args.col_ix) == 4:
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
-        submission.to_csv(os.path.join(args.submission_dir, f"submission_rf_{date_time}_n_est={study.best_params['n_estimators']}.csv"), index_label="sample_index")
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_rf_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.csv"), index_label="sample_index")
         return predictions, submission
     
     return predictions
@@ -242,7 +257,6 @@ def main(args):
         y_hat_bl = []
         y_hat_rf = []
         scores = []
-        final_score = np.inf
 
         print("START TRAINING ...")
         for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(y_train)))):
@@ -264,10 +278,16 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            n_estimators =  trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1])
+            n_estimators =  trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], 50)
+            max_depth =  trial.suggest_categorical('max_depth', args.max_depth)
+            min_samples_leaf =  trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
 
             # random forest
-            rf = RandomForestRegressor(n_estimators=n_estimators, n_jobs=-1, criterion="squared_error")
+            rf = RandomForestRegressor(n_estimators=n_estimators, 
+                                       max_depth=max_depth, 
+                                       min_samples_leaf=min_samples_leaf, 
+                                       n_jobs=-1, 
+                                       criterion="squared_error")
             rf.fit(X_t, y_t)
             random_forests.append(rf)
             print(f'Random Forest score: {rf.score(X_v, y_v)}')
@@ -289,20 +309,13 @@ def main(args):
         mean_score = np.mean(np.array(scores))
         print(f'mean score: {mean_score}\n')
         
-        # best models
-        if mean_score < final_score:
-            final_score = mean_score
-            trial = trial.number
-
-        print(f'final score {final_score} from trial {trial}\n')
-        
         return mean_score
     
-    study = optuna.create_study(direction='minimize')
+    study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
     
     # save study
-    output_file = os.path.join(args.submission_dir, f"study_rf_{date_time}_n_est={study.best_params['n_estimators']}.pkl")
+    output_file = os.path.join(args.submission_dir, f"study_rf_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
     with open(output_file, "wb") as f_out:
         joblib.dump(study, f_out)
 
@@ -329,7 +342,7 @@ if __name__ == "__main__":
     np.random.seed(RANDOM_STATE)
     
     now = datetime.now()
-    date_time = now.strftime("%Y%m%d%H%M%S")
+    date_time = now.strftime("%Y%m%d%H%M")
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False)
@@ -343,12 +356,14 @@ if __name__ == "__main__":
     parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[500, 1000])
-    parser.add_argument('--n-trials', type=int, default=200)
+    parser.add_argument('--max-depth', type=int, nargs='+', default=[5, 10, 100, None])
+    parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 10, 50])
+    parser.add_argument('--n-trials', type=int, default=100)
 
     args = parser.parse_args()
 
-    output = os.path.join(args.submission_dir, f"out_{date_time}_n_est={args.n_estimators}")
-    sys.stdout = open(output, 'w')
+    #output = os.path.join(args.submission_dir, f"out_{date_time}")
+    #sys.stdout = open(output, 'w')
     
     print('BEGIN argparse key - value pairs')
     for key, value in vars(args).items():
@@ -357,7 +372,7 @@ if __name__ == "__main__":
     print()
 
     cols = ["P205", "K", "Mg", "pH"]
-
+    
     main(args)
 
-    sys.stdout.close()
+    #sys.stdout.close()
