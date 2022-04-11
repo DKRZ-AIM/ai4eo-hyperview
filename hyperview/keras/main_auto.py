@@ -372,7 +372,7 @@ def main(args):
 
             X_t = X_processed[ix_train]
             y_t = y_train_col[ix_train]
-            augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=True)
+            augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
             augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1], log=True)
 
             for idy in range(augment_constant):
