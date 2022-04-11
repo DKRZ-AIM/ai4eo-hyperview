@@ -191,6 +191,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
                                          criterion="squared_error")
     optimised_rf.fit(X_processed, y_train_col)
     predictions = optimised_rf.predict(X_test)
+    predictions = predictions * np.array(cons[:len(args.col_ix)])
     
     # print feature importances
     feats = {}
@@ -278,7 +279,7 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            n_estimators =  trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], 50)
+            n_estimators =  trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
             max_depth =  trial.suggest_categorical('max_depth', args.max_depth)
             min_samples_leaf =  trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
 
@@ -357,14 +358,16 @@ if __name__ == "__main__":
     # model hyperparams
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[500, 1000])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[5, 10, 100, None])
+    parser.add_argument('--max-depth-none', action='store_true', default=False)
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 10, 50])
     parser.add_argument('--n-trials', type=int, default=100)
 
     args = parser.parse_args()
 
-    #output = os.path.join(args.submission_dir, f"out_{date_time}")
-    #sys.stdout = open(output, 'w')
-    
+    # None is added to max-depth (annot be done directly -> type error)
+    if args.max_depth_none:
+        args.max_depth = args.max_depth + [None]
+
     print('BEGIN argparse key - value pairs')
     for key, value in vars(args).items():
         print(f'{key}: {value}')
@@ -375,4 +378,3 @@ if __name__ == "__main__":
     
     main(args)
 
-    #sys.stdout.close()
