@@ -286,9 +286,8 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
 
     # save the model
     if args.save_model:
-        output_file = os.path.join(args.model_dir, f"{final_model}_{date_time}_" \
-                                                   f"nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
-                                                   f"minsl={study.best_params['min_samples_leaf']}.bin")
+        output_file = os.path.join(args.model_dir, f"{final_model}_{date_time}_"f"nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
+                                                   f"minsl={study.best_params['min_samples_leaf']}_"f"aug_con={study.best_params['augment_constant']}_"f"aug_par={study.best_params['augment_partition']}.bin")
 
         with open(output_file, "wb") as f_out:
             joblib.dump(optimised_model, f_out)
@@ -299,7 +298,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
         print(submission.head())
         submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['reg_name']}_" \
                                                             f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
-                                                            f"minsl={study.best_params['min_samples_leaf']}.csv"),
+                                                            f"minsl={study.best_params['min_samples_leaf']}_"f"aug_con={study.best_params['augment_constant']}_"f"aug_par={study.best_params['augment_partition']}.csv"),
                           index_label="sample_index")
         return predictions, submission
 
@@ -373,11 +372,14 @@ def main(args):
 
             X_t = X_processed[ix_train]
             y_t = y_train_col[ix_train]
-            for idy in range(args.augment_constant):
+            augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=True)
+            augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1], log=True)
+
+            for idy in range(augment_constant):
                 X_ta_1 = X_aug_processed[ix_train+(idy*len(y_train))]
                 y_ta_1 = y_aug_train_col[ix_train+(idy*len(y_train))]
-                X_t=np.concatenate((X_t,X_ta_1[-250:]),axis=0)
-                y_t=np.concatenate((y_t,y_ta_1[-250:]),axis=0)
+                X_t=np.concatenate((X_t,X_ta_1[-augment_partition:]),axis=0)
+                y_t=np.concatenate((y_t,y_ta_1[-augment_partition:]),axis=0)
 
             # mixing augmentation
             if args.mix_aug:
@@ -486,10 +488,11 @@ if __name__ == "__main__":
     parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 1024])
-    parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16,32,64, 128, 256, None])
+    parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=128)
     parser.add_argument('--augment-constant', type=int, default=5)
+    parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
 
     args = parser.parse_args()
 
