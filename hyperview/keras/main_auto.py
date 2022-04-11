@@ -482,11 +482,11 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False)
-    parser.add_argument('--in-data', type=str, default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/hyperview/keras/')
+    parser.add_argument('--in-data', type=str, default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/')
     parser.add_argument('--submission-dir', type=str,
-                        default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/hyperview/keras/modeldir/')
+                        default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/modeldir/')
     parser.add_argument('--model-dir', type=str,
-                        default='/local_home/kuzu_ri/GIT_REPO/ai4eo_hyperview/hyperview/keras/modeldir/')
+                        default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/modeldir/')
     parser.add_argument('--save-pred', action='store_true', default=False)
     parser.add_argument('--save-model', action='store_true', default=False)
     parser.add_argument('--col-ix', type=int, nargs='+', default=[0, 1, 2, 3])
