@@ -12,5 +12,5 @@ cd $codedir
 PYTHONPATH=$PYTHONPATH:"$codedir"
 export PYTHONPATH
 
-python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --n-trials 200
+python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --n-trials 200 --n-estimators 900 1200 --max-depth 50 100 --max-depth-none --min-samples-leaf 1 3 5 10  
 
