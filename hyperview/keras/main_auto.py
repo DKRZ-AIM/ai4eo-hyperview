@@ -13,6 +13,8 @@ from tqdm.auto import tqdm
 from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
+from sklearn.multioutput import MultiOutputRegressor
+import xgboost as xgb
 import pywt
 import joblib
 import optuna
@@ -52,41 +54,6 @@ class SpectralCurveFiltering():
 
     def __call__(self, sample: np.ndarray):
         return self.merge_function(sample, axis=(1, 2))
-
-
-def load_data2(directory: str, args):
-    """Load each cube, reduce its dimensionality and append to array.
-
-    Args:
-        directory (str): Directory to either train or test set
-    Returns:
-        [type]: A list with spectral curve for each sample.
-    """
-    datalist = []
-    masklist = []
-
-    all_files = np.array(
-        sorted(
-            glob(os.path.join(directory, "*.npz")),
-            key=lambda x: int(os.path.basename(x).replace(".npz", "")),
-        )
-    )
-
-    # in debug mode, only consider first 100 patches
-    if args.debug:
-        all_files = all_files[:100]
-
-    for file_name in all_files:
-        with np.load(file_name) as npz:
-            mask = npz['mask']
-            data = npz['data']
-
-            datalist.append(data)
-            masklist.append(mask)
-
-    return datalist, masklist
-
-
 
 
 def load_data(directory: str, file_path: str, istrain,args):
@@ -245,8 +212,7 @@ def preprocess(data_list, mask_list):
 
         cos = dct(arr)
 
-        out = np.concatenate(
-            [arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, real, imag, reals, imags, cDw2, cAw2,cos], -1)
+        out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, real, imag, reals, imags, cDw2, cAw2,cos], -1)
         processed_data.append(out)
 
     return np.array(processed_data)
@@ -279,29 +245,39 @@ def evaluation_score(args, y_v, y_hat, y_b, cons):
     return score / 4
 
 
+
 def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args):
-    # predictions = []
-    # for rf in random_forests:
-    #    pp = rf.predict(X_test)
-    #    predictions.append(pp)
+    final_model = study.best_params["regressor"]
+    if final_model == "RandomForest":
+        # fit rf with best parameters on entire training data
+        optimised_model = RandomForestRegressor(n_estimators=study.best_params['n_estimators'],
+                                                max_depth=study.best_params['max_depth'],
+                                                min_samples_leaf=study.best_params['min_samples_leaf'],
+                                                n_jobs=-1,
+                                                criterion="squared_error")
+    else:
+        optimised_model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
+                                                                n_estimators=study.best_params['n_estimators'],
+                                                                verbosity=1))
 
-    # predictions = np.asarray(predictions)
-    # predictions = np.mean(predictions, axis=0)
-    # predictions = predictions * np.array(cons[:len(args.col_ix)])
+    optimised_model.fit(X_processed, y_train_col)
+    predictions = optimised_model.predict(X_test)
+    predictions = predictions * np.array(cons[:len(args.col_ix)])
 
-    # fit rf with best parameters on entire training data
-    optimised_rf = RandomForestRegressor(n_estimators=study.best_params['n_estimators'],
-                                         max_depth=study.best_params['max_depth'],
-                                         min_samples_leaf=study.best_params['min_samples_leaf'],
-                                         n_jobs=-1,
-                                         criterion="squared_error")
-    optimised_rf.fit(X_processed, y_train_col)
-    predictions = optimised_rf.predict(X_test)
+    # calculate score on full training set
+    baseline = BaselineRegressor()
+    baseline.fit(X_processed, y_train_col)
+    y_b = baseline.predict(X_processed)
+    y_fulltrain_pred = optimised_model.predict(X_processed)
+
+    score = evaluation_score(args, y_train_col, y_fulltrain_pred, y_b, cons)
+    print(f'\nScore of best model ({final_model}) on training set: {score}\n')
 
     # print feature importances
     feats = {}
-    importances = optimised_rf.feature_importances_
-    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3','dXds1', 's_0', 's_1', 's_2', 's_3','s_4', 'real', 'imag','reals', 'imags', 'cDw2', 'cAw2', 'cos']
+    importances = optimised_model.feature_importances_
+    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
+                     'reals','imags', 'cDw2', 'cAw2', 'cos']
     for feature, importance in zip(feature_names, importances):
         feats[feature] = importance
     feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
@@ -310,18 +286,20 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
 
     # save the model
     if args.save_model:
-        output_file = os.path.join(args.model_dir,
-                                   f"rf_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.bin")
+        output_file = os.path.join(args.model_dir, f"{final_model}_{date_time}_" \
+                                                   f"nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
+                                                   f"minsl={study.best_params['min_samples_leaf']}.bin")
 
         with open(output_file, "wb") as f_out:
-            joblib.dump(optimised_rf, f_out)
+            joblib.dump(optimised_model, f_out)
 
     # only make submission file, if all 4 soil parameters are considered
-    if len(args.col_ix) == 4:
+    if len(args.col_ix) == 4 and args.debug == False:
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
-        submission.to_csv(os.path.join(args.submission_dir,
-                                       f"submission_rf_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.csv"),
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['reg_name']}_" \
+                                                            f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
+                                                            f"minsl={study.best_params['min_samples_leaf']}.csv"),
                           index_label="sample_index")
         return predictions, submission
 
@@ -413,22 +391,34 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], 50)
-            max_depth = trial.suggest_categorical('max_depth', args.max_depth)
-            min_samples_leaf = trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
+            reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
 
-            # random forest
-            rf = RandomForestRegressor(n_estimators=n_estimators,
-                                       max_depth=max_depth,
-                                       min_samples_leaf=min_samples_leaf,
-                                       n_jobs=-1,
-                                       criterion="squared_error")
-            rf.fit(X_t, y_t)
-            random_forests.append(rf)
-            print(f'Random Forest score: {rf.score(X_v, y_v)}')
+            print(f"Training on {reg_name}")
+            if reg_name == "RandomForest":
+                n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
+                max_depth = trial.suggest_categorical('max_depth', args.max_depth)
+                min_samples_leaf = trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
+
+                # random forest
+                model = RandomForestRegressor(n_estimators=n_estimators,
+                                              max_depth=max_depth,
+                                              min_samples_leaf=min_samples_leaf,
+                                              n_jobs=-1,
+                                              criterion="squared_error")
+            else:
+                n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
+
+                # xgboost
+                model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
+                                                              n_estimators=n_estimators,
+                                                              verbosity=1))
+
+            model.fit(X_t, y_t)
+            random_forests.append(model)
+            print(f'{reg_name} score: {model.score(X_v, y_v)}')
 
             # predictions
-            y_hat = rf.predict(X_v)
+            y_hat = model.predict(X_v)
             y_b = baseline.predict(X_v)
 
             y_hat_bl.append(y_b)
@@ -450,10 +440,12 @@ def main(args):
     study.optimize(objective, n_trials=args.n_trials)
 
     # save study
-    output_file = os.path.join(args.submission_dir,
-                               f"study_rf_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
-    with open(output_file, "wb") as f_out:
-        joblib.dump(study, f_out)
+    final_model = study.best_params["regressor"]
+    if args.debug == False:
+        output_file = os.path.join(args.submission_dir,
+                                   f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
+        with open(output_file, "wb") as f_out:
+            joblib.dump(study, f_out)
 
     # prepare submission
     print("MAKE PREDICTIONS AND PREPARE SUBMISSION")
@@ -493,9 +485,9 @@ if __name__ == "__main__":
     parser.add_argument('--folds', type=int, default=5)
     parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
-    parser.add_argument('--n-estimators', type=int, nargs='+', default=[250, 500, 1000])
-    parser.add_argument('--max-depth', type=int, nargs='+', default=[5, 10, 100, None])
-    parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 8, 16, 32, 64])
+    parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 512, 1024])
+    parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16,32,64, 128, 256, None])
+    parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=128)
     parser.add_argument('--augment-constant', type=int, default=5)
 
