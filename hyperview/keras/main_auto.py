@@ -254,7 +254,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
                                                 max_depth=study.best_params['max_depth'],
                                                 min_samples_leaf=study.best_params['min_samples_leaf'],
                                                 n_jobs=-1,
-                                                criterion="squared_error")
+                                                criterion="mse")
     else:
         optimised_model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
                                                                 n_estimators=study.best_params['n_estimators'],
