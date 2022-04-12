@@ -490,7 +490,7 @@ if __name__ == "__main__":
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 4, 8, 16, 32, 64])
-    parser.add_argument('--n-trials', type=int, default=128)
+    parser.add_argument('--n-trials', type=int, default=256)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
 
