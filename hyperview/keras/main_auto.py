@@ -405,8 +405,7 @@ def main(args):
                 model = RandomForestRegressor(n_estimators=n_estimators,
                                               max_depth=max_depth,
                                               min_samples_leaf=min_samples_leaf,
-                                              n_jobs=-1,
-                                              criterion="squared_error")
+                                              n_jobs=-1)
             else:
                 n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
 
