@@ -253,8 +253,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
         optimised_model = RandomForestRegressor(n_estimators=study.best_params['n_estimators'],
                                                 max_depth=study.best_params['max_depth'],
                                                 min_samples_leaf=study.best_params['min_samples_leaf'],
-                                                n_jobs=-1,
-                                                criterion="mse")
+                                                n_jobs=-1)
     else:
         optimised_model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
                                                                 n_estimators=study.best_params['n_estimators'],
@@ -305,6 +304,40 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     return predictions
 
 
+def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score):
+
+    predictions = []
+    for rf in best_model:
+        pp = rf.predict(X_test)
+        predictions.append(pp)
+
+    predictions = np.asarray(predictions)
+
+    predictions = np.mean(predictions, axis=0)
+    predictions = predictions * np.array(cons[:len(args.col_ix)])
+
+
+    # print feature importances
+    feats = {}
+    importances = best_model[-1].feature_importances_
+    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
+                     'reals','imags', 'cDw2', 'cAw2', 'cos']
+    for feature, importance in zip(feature_names, importances):
+        feats[feature] = importance
+    feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
+    for feat in feats:
+        print(f'{feat[0]}: {feat[1]}')
+
+    submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
+    print(submission.head())
+    if study is not None:
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['regressor']}_" \
+                                                            f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
+                                                            f"minsl={study.best_params['min_samples_leaf']}_"f"aug_con={study.best_params['augment_constant']}_"f"aug_par={study.best_params['augment_partition']}.csv"),index_label="sample_index")
+    else:
+        submission.to_csv(os.path.join(args.submission_dir, "submission_best_{}.csv".format(min_score)),index_label="sample_index")
+
+
 def main(args):
     train_data = os.path.join(args.in_data, "train_data", "train_data")
     test_data = os.path.join(args.in_data, "test_data")
@@ -353,7 +386,13 @@ def main(args):
 
     cons = np.array([325.0, 625.0, 400.0, 7.8])
 
+    global best_model
+    best_model = None
+    global min_score
+    min_score = 10
     def objective(trial):
+        global best_model
+        global min_score
 
         print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
@@ -435,34 +474,39 @@ def main(args):
         # final score
         mean_score = np.mean(np.array(scores))
         print(f'mean score: {mean_score}\n')
+        if mean_score < min_score:
+            min_score=mean_score
+            best_model=random_forests
+            predictions_and_submission_2(None, best_model, X_test, cons, args,min_score)
 
         return mean_score
 
     study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
+    predictions_and_submission_2(study, best_model, X_test, cons, args,min_score)
 
     # save study
-    final_model = study.best_params["regressor"]
-    if args.debug == False:
-        output_file = os.path.join(args.submission_dir,
-                                   f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
-        with open(output_file, "wb") as f_out:
-            joblib.dump(study, f_out)
+    #final_model = study.best_params["regressor"]
+    #if args.debug == False:
+    #    output_file = os.path.join(args.submission_dir,
+    #                               f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
+    #    with open(output_file, "wb") as f_out:
+    #        joblib.dump(study, f_out)
 
     # prepare submission
-    print("MAKE PREDICTIONS AND PREPARE SUBMISSION")
+    #print("MAKE PREDICTIONS AND PREPARE SUBMISSION")
     #print('preprocess test data ...')
     #X_test = preprocess(X_test, M_test)
 
-    if args.col_ix == 4:
-        predictions, submission = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
-    else:
-        predictions = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
-    print("PREDICTIONS AND SUBMISSION FINISHED")
+    #if args.col_ix == 4:
+    #    predictions, submission = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
+    #else:
+    #    predictions = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
+    #print("PREDICTIONS AND SUBMISSION FINISHED")
 
     # save predictions
-    if args.save_pred:
-        pass
+    #if args.save_pred:
+    #    pass
 
 
 if __name__ == "__main__":
