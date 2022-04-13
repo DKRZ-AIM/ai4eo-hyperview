@@ -576,7 +576,9 @@ def main(args):
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
                       epochs=240,
+                      batch_size=128,
                       shuffle=True,
+                      use_multiprocessing=True,
                       callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
 
             auto_encoder_list.append(autoencoder)
