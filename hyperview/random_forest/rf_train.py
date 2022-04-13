@@ -149,9 +149,9 @@ def preprocess(data_list, mask_list):
     return np.array(processed_data)
 
 
-def mixing_augmentation(X, y, fract=0.1):
+def mixing_augmentation(X, y, fract, mix_const):#fract=0.1):
 
-    mix_const = 0.05
+    #mix_const = 0.05
     mix_index_1 = np.random.randint(X.shape[0], size=int(np.floor(X.shape[0]*fract)))
     mix_index_2 = np.random.randint(X.shape[0], size=int(np.floor(X.shape[0]*fract)))
 
@@ -175,6 +175,17 @@ def evaluation_score(args, y_v, y_hat, y_b, cons):
     
     return score / 4       
 
+def print_feature_importances(feature_names, importances):
+    
+    feats = {}
+    for feature, importance in zip(feature_names, importances):
+         feats[feature] = importance
+    feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
+    for feat in feats:
+        print(f'{feat[0]}: {feat[1]}')
+
+
+
 def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args):
    
     final_model = study.best_params["regressor"]
@@ -188,6 +199,11 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     else:
         optimised_model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
                                                            n_estimators=study.best_params['n_estimators'],
+                                                           eta=study.best_params['eta'],
+                                                           gamma=study.best_params['gamma'],
+                                                           alpha=study.best_params['alpha'],
+                                                           max_depth=study.best_params['max_depth'],
+                                                           min_child_weight=study.best_params['min_child_weight'],
                                                            verbosity=1))
 
     optimised_model.fit(X_processed, y_train_col)
@@ -204,15 +220,16 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     print(f'\nScore of best model ({final_model}) on training set: {score}\n')
 
     # print feature importances
-    feats = {}
-    importances = optimised_model.feature_importances_
     feature_names=['arr','dXdl', 'd2Xdl2', 's_0', 's_1', 's_3', 's_4', 'real', 'imag']
-    for feature, importance in zip(feature_names, importances):
-        feats[feature] = importance
-    feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
-    for feat in feats:
-        print(f'{feat[0]}: {feat[1]}')
-
+    if final_model == 'RandomForest':
+        importances = optimised_model.feature_importances_
+        print_feature_importances(feature_names, importances)
+    else:
+        for i in range(len(optimised_model.estimators_)):
+            importances = optimised_model.estimators_[i].feature_importances_
+            
+            print_feature_importances(feature_names, importances)
+    
     # save the model
     if args.save_model:
         output_file = os.path.join(args.model_dir, f"{final_model}_{date_time}_"\
@@ -223,12 +240,19 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
             joblib.dump(optimised_model, f_out)
 
     # only make submission file, if all 4 soil parameters are considered
+    # only predictions from RF are saved!
     if len(args.col_ix) == 4 and  args.debug==False:
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
-        submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['reg_name']}_"\
+        if final_model=="RandomForest":
+            submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_"\
                 f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
                 f"minsl={study.best_params['min_samples_leaf']}.csv"), index_label="sample_index")
+        else:
+            submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_"\
+                f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
+                f"eta={eta}_gamma={gamma}_alpha={alpha}"\
+                f"minsl={study.best_params['min_child_weight']}.csv"), index_label="sample_index")
         return predictions, submission
     
     return predictions
@@ -283,7 +307,9 @@ def main(args):
         
             # mixing augmentation
             if args.mix_aug:
-                X_t, y_t = mixing_augmentation(X_t, y_t)
+                fract = trial.suggest_categorical('fract', args.fract)
+                mix_const = trial.suggest_float('mix_const', args.fract)
+                X_t, y_t = mixing_augmentation(X_t, y_t, fract, mix_const)
 
             X_v = X_processed[ix_valid]
             y_v = y_train_col[ix_valid]
@@ -293,7 +319,7 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            reg_name= trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
+            reg_name= trial.suggest_categorical("regressor", args.regressors)
 
             print(f"Training on {reg_name}")
             if reg_name == "RandomForest":
@@ -309,10 +335,21 @@ def main(args):
                                            criterion="squared_error")
             else:
                 n_estimators =  trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
-                
+                eta = trial. suggest_float('eta', args.eta[0], args.eta[1], log=True)
+                gamma = trial. suggest_float('gamma', args.gamma[0], args.gamma[1])
+                alpha = trial. suggest_float('alpha', args.alpha[0], args.alpha[1])
+                max_depth = trial. suggest_categorical('max_depth', args.max_depth)
+                min_child_weight = trial. suggest_categorical('min_child_weight', args.min_child_weight)
+
+
                 # xgboost
                 model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
                                                            n_estimators=n_estimators,
+                                                           eta=eta,
+                                                           gamma=gamma,
+                                                           alpha=alpha,
+                                                           max_depth=max_depth,
+                                                           min_child_weight=min_child_weight,
                                                            verbosity=1))
             
             model.fit(X_t, y_t)
@@ -343,10 +380,14 @@ def main(args):
     
     # save study
     final_model = study.best_params["regressor"]
-    if args.debug == False:
+
+    if args.debug == False and final_model=="RandomForest":
         output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
-        with open(output_file, "wb") as f_out:
-            joblib.dump(study, f_out)
+    if args.debug == False and final_model=="XGB":
+        output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_eta={eta}_gamma={gamma}_alpha={alpha}_minsl={study.best_params['min_child_weight']}.pkl")
+    
+    with open(output_file, "wb") as f_out:
+        joblib.dump(study, f_out)
 
     # prepare submission
     print("MAKE PREDICTIONS AND PREPARE SUBMISSION")
@@ -382,13 +423,21 @@ if __name__ == "__main__":
     parser.add_argument('--save-model', action='store_true', default=False)
     parser.add_argument('--col-ix', type=int, nargs='+', default=[0, 1, 2, 3])
     parser.add_argument('--folds', type=int, default=5)
-    parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[500, 1000])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[5, 10, 100, None])
     parser.add_argument('--max-depth-none', action='store_true', default=False)
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 10, 50])
+    parser.add_argument('--eta', type=float, nargs='+', default=[0.1, 0.5]) # default 0.3
+    parser.add_argument('--gamma', type=float, nargs='+', default=[0, 1]) # default=0
+    parser.add_argument('--alpha', type=float, nargs='+', default=[0, 1]) # default=0
+    parser.add_argument('--min-child_weight', type=int, nargs='+', default=[1, 10, 50])
+    parser.add_argument('--regressors', type=str, nargs='+', default=["RandomForest", "XGB"])
     parser.add_argument('--n-trials', type=int, default=100)
+    # agmentation
+    parser.add_argument('--mix-aug', action='store_true', default=False)
+    parser.add_argument('--fract', type=float, nargs='+', default=[0.1])
+    parser.add_argument('--mix-const', type=float, nargs='+', default=[0.05])
 
     args = parser.parse_args()
 
