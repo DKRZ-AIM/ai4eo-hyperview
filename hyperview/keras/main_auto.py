@@ -432,8 +432,8 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            #reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
-            reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+            reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
+            #reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
 
             print(f"Training on {reg_name}")
             if reg_name == "RandomForest":
