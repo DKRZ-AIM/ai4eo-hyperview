@@ -560,7 +560,11 @@ def main(args):
             print(f'fold {i}:')
             X_t = X_processed_ext[ix_train]
 
-            np.vsplit(X_aug_processed, 5)
+            t_indices=ix_train < len(X_processed)
+            X_aug_processed_split=np.vsplit(X_aug_processed, args.augment_constant)
+            for X_aug in X_aug_processed_split:
+                idx=ix_train[t_indices]
+                X_t=np.concatenate((X_t,X_aug[idx]),axis=0)
 
             latent_dimension = trial.suggest_categorical('latent_dimension', args.latent_dimension)
             learning_rate = trial.suggest_categorical('learning_rate', args.learning_rate)
@@ -571,7 +575,7 @@ def main(args):
             autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='cosine_similarity')
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
-                      epochs=5,
+                      epochs=240,
                       shuffle=True,
                       callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
 
