@@ -22,6 +22,46 @@ from optuna.samplers import TPESampler
 from sklearn import preprocessing
 from scipy.fftpack import dct
 import sys
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense,Dropout, BatchNormalization
+from tensorflow.keras.optimizers import Nadam, Adam,SGD
+from tensorflow.keras import layers
+from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
+
+
+
+class Autoencoder(keras.Model):
+  def __init__(self, latent_dim, output_dim,layer_activation):
+    super(Autoencoder, self).__init__()
+    self.latent_dim = latent_dim
+    self.output_dim=output_dim
+    self.encoder = tf.keras.Sequential([
+      layers.Dense(output_dim, activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(output_dim, activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(int(output_dim/2), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(int(output_dim/4), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(latent_dim, activation=layer_activation),
+    ])
+    self.decoder = tf.keras.Sequential([
+      layers.Dense(int(output_dim/4), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(int(output_dim/2), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(output_dim, activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(output_dim, activation='linear'),
+    ])
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    decoded = self.decoder(encoded)
+    return decoded
 
 
 class BaselineRegressor():
@@ -304,11 +344,12 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     return predictions
 
 
-def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score):
+def predictions_and_submission_2(study,study_auto,auto_encoders, best_model, X_test, cons, args,min_score):
 
     predictions = []
-    for rf in best_model:
-        pp = rf.predict(X_test)
+    for rf,ae in zip(best_model,auto_encoders):
+        X_test_ae=ae.encoder(X_test).numpy()
+        pp = rf.predict(X_test_ae)
         predictions.append(pp)
 
     predictions = np.asarray(predictions)
@@ -318,19 +359,28 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score
 
 
     # print feature importances
-    feats = {}
-    importances = best_model[-1].feature_importances_
-    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
-                     'reals','imags', 'cDw2', 'cAw2', 'cos']
-    for feature, importance in zip(feature_names, importances):
-        feats[feature] = importance
-    feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
-    for feat in feats:
-        print(f'{feat[0]}: {feat[1]}')
+    #feats = {}
+    #importances = best_model[-1].feature_importances_
+    #feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
+    #                 'reals','imags', 'cDw2', 'cAw2', 'cos']
+    #for feature, importance in zip(feature_names, importances):
+    #    feats[feature] = importance
+    #feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
+    #for feat in feats:
+    #    print(f'{feat[0]}: {feat[1]}')
 
     submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
     print(submission.head())
-    if study is not None:
+
+    if study is not None and study_auto is not None:
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['regressor']}_" \
+                                                            f"lr{study_auto.best_params['learning_rate']}_" \
+                                                            f"latent_dim={study_auto.best_params['latent_dimension']}_activation={study_auto.best_params['layer_activation']}_" \
+                                                            f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
+                                                            f"minsl={study.best_params['min_samples_leaf']}_"f"aug_con={study.best_params['augment_constant']}_"f"aug_par={study.best_params['augment_partition']}.csv"),
+                          index_label="sample_index")
+
+    elif study is not None:
         submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['regressor']}_" \
                                                             f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
                                                             f"minsl={study.best_params['min_samples_leaf']}_"f"aug_con={study.best_params['augment_constant']}_"f"aug_par={study.best_params['augment_partition']}.csv"),index_label="sample_index")
@@ -432,8 +482,8 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
-            #reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+            #reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
+            reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
 
             print(f"Training on {reg_name}")
             if reg_name == "RandomForest":
@@ -448,12 +498,15 @@ def main(args):
                                               n_jobs=-1)
             else:
                 n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
+                max_depth = trial. suggest_categorical('max_depth', args.max_depth)
 
                 # xgboost
                 model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
+                                                              max_depth=max_depth,
                                                               n_estimators=n_estimators,
                                                               verbosity=1))
-
+            X_t = auto_encoders[i].encoder(X_t).numpy()
+            X_v = auto_encoders[i].encoder(X_v).numpy()
             model.fit(X_t, y_t)
             random_forests.append(model)
             print(f'{reg_name} score: {model.score(X_v, y_v)}')
@@ -477,13 +530,71 @@ def main(args):
         if mean_score < min_score:
             min_score=mean_score
             best_model=random_forests
-            predictions_and_submission_2(None, best_model, X_test, cons, args,min_score)
+            predictions_and_submission_2(None,None,auto_encoders, best_model, X_test, cons, args,min_score)
 
         return mean_score
 
+    global auto_encoders
+    auto_encoders = None
+    global min_auto
+    min_auto = 10
+    def objective2(trial):
+        auto_encoder_list = []
+        global auto_encoders
+        global min_auto
+        scores = []
+
+        print(f"\nTRIAL NUMBER: {trial.number}\n")
+        # training
+        kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
+
+        #augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
+        #augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0],
+        #                                      args.augment_partition[1], log=True)
+        # X_aug_processed_split = np.vsplit(X_aug_processed, 5)
+
+        X_processed_ext = np.concatenate((X_processed, X_test), axis=0)
+
+
+        for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(X_processed_ext)))):
+            print(f'fold {i}:')
+            X_t = X_processed_ext[ix_train]
+
+            np.vsplit(X_aug_processed, 5)
+
+            latent_dimension = trial.suggest_categorical('latent_dimension', args.latent_dimension)
+            learning_rate = trial.suggest_categorical('learning_rate', args.learning_rate)
+            layer_activation = trial.suggest_categorical('layer_activation', args.layer_activation)
+
+            X_v = X_processed_ext[ix_valid]
+            autoencoder = Autoencoder(latent_dimension, X_v.shape[-1],layer_activation)
+            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='cosine_similarity')
+            autoencoder.fit(X_t, X_t,
+                      validation_split=0.2,
+                      epochs=5,
+                      shuffle=True,
+                      callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
+
+            auto_encoder_list.append(autoencoder)
+            val_loss = autoencoder.evaluate(X_v,X_v)
+            scores.append(val_loss)
+
+        print("END TRAINING")
+        # final score
+        mean_score = np.mean(np.array(scores))
+        print(f'mean score: {mean_score}\n')
+        if mean_score < min_auto:
+            min_auto = mean_score
+            auto_encoders = auto_encoder_list
+
+        return mean_score
+
+    study_auto = optuna.create_study(sampler=TPESampler(), direction='minimize')
+    study_auto.optimize(objective2, n_trials=args.n_trials_auto)
+
     study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
-    predictions_and_submission_2(study, best_model, X_test, cons, args,min_score)
+    predictions_and_submission_2(study,study_auto, auto_encoders,best_model, X_test, cons, args,min_score)
 
     # save study
     #final_model = study.best_params["regressor"]
@@ -533,10 +644,14 @@ if __name__ == "__main__":
     # model hyperparams
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
-    parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 4, 8, 16, 32, 64])
-    parser.add_argument('--n-trials', type=int, default=256)
-    parser.add_argument('--augment-constant', type=int, default=5)
+    parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
+    parser.add_argument('--n-trials', type=int, default=1)
+    parser.add_argument('--n-trials-auto', type=int, default=12)
+    parser.add_argument('--augment-constant', type=int, default=128)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
+    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 ,256, 512])
+    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
+    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.1, 0.01,0.001,0.0001])
 
     args = parser.parse_args()
 
