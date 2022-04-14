@@ -392,8 +392,16 @@ def main(args):
     X_processed = preprocess(X_train, M_train)
     X_aug_processed = preprocess(X_aug_train, M_aug_train)
 
+    X_train = None
+    M_train = None
+    X_aug_train = None
+    M_aug_train = None
+
+
     print('preprocess test data ...')
     X_test = preprocess(X_test, M_test)
+
+    M_test=None
 
     #X_processed_normalized = np.zeros(X_processed.shape)
     #X_aug_processed_normalized=np.zeros(X_aug_processed.shape)
