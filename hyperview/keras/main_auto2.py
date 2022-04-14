@@ -44,14 +44,14 @@ class Autoencoder3D(keras.Model):
       layers.Conv3D(4, (3,3,3), activation=layer_activation, padding='same'),
       layers.MaxPooling3D((2,2,1), padding='same'),
       layers.Conv3D(2, (3,3,3), activation=layer_activation, padding='same'),
-      layers.MaxPooling3D((2,2,1), padding='same'),
-      layers.Conv3D(1, (3, 3, 3), activation=layer_activation, padding='same',kernel_regularizer=regularizers.L1(l1_reg)),
+      #layers.MaxPooling3D((2,2,1), padding='same'),
+      #layers.Conv3D(1, (3, 3, 3), activation=layer_activation, padding='same',kernel_regularizer=regularizers.L1(l1_reg)),
       layers.Flatten(),
     ])
     self.decoder = tf.keras.Sequential([
-      layers.Reshape((4, 4, 25 , 1)),
-      layers.UpSampling3D((2,2,1)),
-      layers.Conv3D(2, (3, 3, 3), activation=layer_activation, padding='same'),
+      layers.Reshape((4, 4, 25 , 2)),
+      #layers.UpSampling3D((2,2,1)),
+      #layers.Conv3D(2, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.UpSampling3D((2, 2, 1)),
       layers.Conv3D(4, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.UpSampling3D((2, 2, 3)),
@@ -229,7 +229,7 @@ def preprocess(data_list, mask_list):
         image = (data * m)
 
         image = _shape_pad(image)
-        image =np.resize(image,(150,64,64,1))
+        image =np.resize(image,(150,32,32,1))
         image=np.transpose(image,[1,2,0,3])
 
         processed_data.append(image)
@@ -555,7 +555,7 @@ def main(args):
             autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='mse')
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
-                      epochs=240,
+                      epochs=60,
                       batch_size=64,
                       shuffle=True,
                       use_multiprocessing=True,
@@ -632,13 +632,13 @@ if __name__ == "__main__":
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=128)
-    parser.add_argument('--n-trials-auto', type=int, default=36)
-    parser.add_argument('--augment-constant', type=int, default=5)
+    parser.add_argument('--n-trials-auto', type=int, default=8)
+    parser.add_argument('--augment-constant', type=int, default=2)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
     parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.01,0.001,0.0001])
-    parser.add_argument('--l1', type=float, nargs='+', default=[0.01, 0.001, 0.0001,0.00001,0.0])
+    parser.add_argument('--l1', type=float, nargs='+', default=[0.00001,0.0])
 
     args = parser.parse_args()
 
