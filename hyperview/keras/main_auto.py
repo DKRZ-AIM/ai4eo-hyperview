@@ -44,8 +44,10 @@ class Autoencoder(keras.Model):
       layers.Dropout(0.25),
       layers.Dense(output_dim, activation=layer_activation),
       layers.Dropout(0.25),
+      layers.BatchNormalization(),
       layers.Dense(int(output_dim/2), activation=layer_activation),
       layers.Dropout(0.25),
+      layers.BatchNormalization(),
       layers.Dense(int(output_dim/4), activation=layer_activation),
       layers.Dropout(0.25),
       layers.Dense(latent_dim, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg)),
@@ -54,8 +56,10 @@ class Autoencoder(keras.Model):
     self.decoder = tf.keras.Sequential([
       layers.Dense(int(output_dim/4), activation=layer_activation),
       layers.Dropout(0.25),
+      layers.BatchNormalization(),
       layers.Dense(int(output_dim/2), activation=layer_activation),
       layers.Dropout(0.25),
+      layers.BatchNormalization(),
       layers.Dense(output_dim, activation=layer_activation),
       layers.Dropout(0.25),
       layers.Dense(output_dim, activation='linear'),
@@ -659,7 +663,7 @@ if __name__ == "__main__":
     parser.add_argument('--n-trials-auto', type=int, default=36)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
-    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 ,256, 512])
+    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 , 256, 512])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
     parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.01,0.001,0.0001])
     parser.add_argument('--l1', type=float, nargs='+', default=[0.01, 0.001, 0.0001, 0.00001, 0.0])
