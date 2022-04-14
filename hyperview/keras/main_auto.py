@@ -29,11 +29,13 @@ from tensorflow.keras.layers import Dense,Dropout, BatchNormalization
 from tensorflow.keras.optimizers import Nadam, Adam,SGD
 from tensorflow.keras import layers
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
+from tensorflow.keras import regularizers
+
 
 
 
 class Autoencoder(keras.Model):
-  def __init__(self, latent_dim, output_dim,layer_activation):
+  def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
     super(Autoencoder, self).__init__()
     self.latent_dim = latent_dim
     self.output_dim=output_dim
@@ -46,7 +48,8 @@ class Autoencoder(keras.Model):
       layers.Dropout(0.25),
       layers.Dense(int(output_dim/4), activation=layer_activation),
       layers.Dropout(0.25),
-      layers.Dense(latent_dim, activation=layer_activation),
+      layers.Dense(latent_dim, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg)),
+
     ])
     self.decoder = tf.keras.Sequential([
       layers.Dense(int(output_dim/4), activation=layer_activation),
@@ -569,9 +572,10 @@ def main(args):
             latent_dimension = trial.suggest_categorical('latent_dimension', args.latent_dimension)
             learning_rate = trial.suggest_categorical('learning_rate', args.learning_rate)
             layer_activation = trial.suggest_categorical('layer_activation', args.layer_activation)
+            l1 = trial.suggest_categorical('l1', args.l1)
 
             X_v = X_processed_ext[ix_valid]
-            autoencoder = Autoencoder(latent_dimension, X_v.shape[-1],layer_activation)
+            autoencoder = Autoencoder(latent_dimension, X_v.shape[-1],layer_activation,l1)
             autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='cosine_similarity')
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
@@ -651,14 +655,14 @@ if __name__ == "__main__":
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
-    parser.add_argument('--n-trials', type=int, default=128)
-    parser.add_argument('--n-trials-auto', type=int, default=12)
+    parser.add_argument('--n-trials', type=int, default=256)
+    parser.add_argument('--n-trials-auto', type=int, default=36)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 ,256, 512])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
-    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.1, 0.01,0.001,0.0001])
-
+    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.01,0.001,0.0001])
+    parser.add_argument('--l1', type=float, nargs='+', default=[0.01, 0.001, 0.0001, 0.00001, 0.0])
     args = parser.parse_args()
 
     # output = os.path.join(args.submission_dir, f"out_{date_time}")
