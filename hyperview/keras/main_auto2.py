@@ -38,8 +38,10 @@ class Autoencoder3D(keras.Model):
     self.output_dim=output_dim
     self.encoder = tf.keras.Sequential([
       layers.Conv3D(16, (3,3,3), activation=layer_activation, padding='same'),
+      layers.Conv3D(16, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.MaxPooling3D((2,2,2), padding='same'),
       layers.Conv3D(8, (3,3,3), activation=layer_activation, padding='same'),
+      layers.Conv3D(8, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.MaxPooling3D((2,2,3), padding='same'),
       layers.Conv3D(4, (3,3,3), activation=layer_activation, padding='same'),
       layers.MaxPooling3D((2,2,1), padding='same'),
@@ -58,7 +60,9 @@ class Autoencoder3D(keras.Model):
       layers.Conv3D(4, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.UpSampling3D((2, 2, 3)),
       layers.Conv3D(8, (3, 3, 3), activation=layer_activation, padding='same'),
+      layers.Conv3D(8, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.UpSampling3D((2, 2, 2)),
+      layers.Conv3D(16, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.Conv3D(16, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.Conv3D(1, (3, 3, 3), activation='linear', padding='same'),
     ])
