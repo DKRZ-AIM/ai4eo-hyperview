@@ -44,14 +44,16 @@ class Autoencoder3D(keras.Model):
       layers.Conv3D(4, (3,3,3), activation=layer_activation, padding='same'),
       layers.MaxPooling3D((2,2,1), padding='same'),
       layers.Conv3D(2, (3,3,3), activation=layer_activation, padding='same'),
+      layers.Conv3D(1, (3, 3, 3), activation=layer_activation, padding='same',kernel_regularizer=regularizers.L1(l1_reg)),
       #layers.MaxPooling3D((2,2,1), padding='same'),
       #layers.Conv3D(1, (3, 3, 3), activation=layer_activation, padding='same',kernel_regularizer=regularizers.L1(l1_reg)),
       layers.Flatten(),
     ])
     self.decoder = tf.keras.Sequential([
-      layers.Reshape((4, 4, 25 , 2)),
+      layers.Reshape((4, 4, 25 , 1)),
       #layers.UpSampling3D((2,2,1)),
       #layers.Conv3D(2, (3, 3, 3), activation=layer_activation, padding='same'),
+      layers.Conv3D(2, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.UpSampling3D((2, 2, 1)),
       layers.Conv3D(4, (3, 3, 3), activation=layer_activation, padding='same'),
       layers.UpSampling3D((2, 2, 3)),
@@ -560,11 +562,11 @@ def main(args):
 
             X_v = X_processed_ext[ix_valid]
             autoencoder = Autoencoder3D(latent_dimension, X_v.shape[-1],layer_activation,l1)
-            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='mse')
+            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='cosine_similarity')
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
-                      epochs=60,
-                      batch_size=32,
+                      epochs=90,
+                      batch_size=16,
                       shuffle=True,
                       use_multiprocessing=True,
                       callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
