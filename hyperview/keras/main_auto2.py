@@ -37,38 +37,68 @@ class Autoencoder3D(keras.Model):
     self.latent_dim = latent_dim
     self.output_dim=output_dim
     self.encoder = tf.keras.Sequential([
-      layers.Conv3D(16, (1,1,3), activation=layer_activation, padding='same'),
-      layers.Conv3D(16, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.MaxPooling3D((2,2,1), padding='same'),
-      layers.Conv3D(8, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.Conv3D(8, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.MaxPooling3D((2,2,1), padding='same'),
-      layers.Conv3D(4, (1,1,3), activation=layer_activation, padding='same'),
-      layers.Conv3D(4, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.MaxPooling3D((2,2,1), padding='same'),
-      layers.Conv3D(2, (1,1,3), activation=layer_activation, padding='same'),
-      layers.Conv3D(1, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.MaxPooling3D((2,2,1), padding='same'),
-      #layers.Conv3D(1, (3, 3, 3), activation=layer_activation, padding='same',kernel_regularizer=regularizers.L1(l1_reg)),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Dropout(0.25),
+      #layers.BatchNormalization(),
+      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.MaxPooling2D((2,2), padding='same'),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Dropout(0.25),
+      #layers.BatchNormalization(),
+      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.MaxPooling2D((3,3), padding='same'),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Dropout(0.25),
+      #layers.BatchNormalization(),
+      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.MaxPooling2D((5,5), padding='same'),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Dropout(0.25),
+      #layers.BatchNormalization(),
+      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
       layers.Flatten(),
-      layers.Dense(600,activation=layer_activation,kernel_regularizer=regularizers.L1(l1_reg)),
-      layers.Dense(600, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg))
+      layers.Dense(1600,activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(1600, activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(1024, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg))
     ])
     self.decoder = tf.keras.Sequential([
-      layers.Reshape((2, 2, 150 , 1)),
-      layers.UpSampling3D((2,2,1)),
-      #layers.Conv3D(2, (3, 3, 3), activation=layer_activation, padding='same'),
-      layers.Conv3D(2, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.UpSampling3D((2, 2, 1)),
-      layers.Conv3D(4, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.Conv3D(4, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.UpSampling3D((2, 2, 1)),
-      layers.Conv3D(8, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.Conv3D(8, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.UpSampling3D((2, 2, 1)),
-      layers.Conv3D(16, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.Conv3D(16, (1, 1, 3), activation=layer_activation, padding='same'),
-      layers.Conv3D(1, (1, 1, 3), activation='linear', padding='same'),
+      layers.Dense(1600, activation=layer_activation),
+      layers.Reshape((5, 5, 64)),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.UpSampling2D((5,5)),
+      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Dropout(0.25),
+      #layers.BatchNormalization(),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.UpSampling2D((3, 3)),
+      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Dropout(0.25),
+      #layers.BatchNormalization(),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.UpSampling2D((2, 2)),
+      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Dropout(0.25),
+      #layers.BatchNormalization(),
+      layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.Conv2D(1, (1, 3), activation='linear', padding='same'),
     ])
 
   def call(self, x):
@@ -79,40 +109,7 @@ class Autoencoder3D(keras.Model):
     return decoded
 
 
-class Autoencoder(keras.Model):
-  def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
-    super(Autoencoder, self).__init__()
-    self.latent_dim = latent_dim
-    self.output_dim=output_dim
-    self.encoder = tf.keras.Sequential([
-      layers.Dense(output_dim, activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(output_dim, activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(int(output_dim/2), activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(int(output_dim / 2), activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(int(output_dim/4), activation=layer_activation),
-      layers.Dropout(0.25),
-      layers.Dense(latent_dim, activation=layer_activation,kernel_regularizer=regularizers.L1(l1_reg)),
-    ])
-    self.decoder = tf.keras.Sequential([
-      layers.Dense(int(output_dim/4), activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(int(output_dim/2), activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(int(output_dim / 2), activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(output_dim, activation=layer_activation),
-      layers.Dropout(0.5),
-      layers.Dense(output_dim, activation='linear'),
-    ])
 
-  def call(self, x):
-    encoded = self.encoder(x)
-    decoded = self.decoder(encoded)
-    return decoded
 
 
 class BaselineRegressor():
@@ -234,13 +231,18 @@ def preprocess(data_list, mask_list):
 
     for idx, (data, mask) in enumerate(tqdm(zip(data_list, mask_list), total=len(data_list), position=0, leave=True,
                                             desc="INFO: Preprocessing data ...")):
-        data = data / 1  # 2210  ## max-max=5419 mean-max=2210
-        m = (1 - mask.astype(int))
-        image = (data * m)
+        #data = data / 1  # 2210  ## max-max=5419 mean-max=2210
 
-        image = _shape_pad(image)
-        image =np.resize(image,(150,32,32,1))
-        image=np.transpose(image,[1,2,0,3])
+        data = np.ma.MaskedArray(data, mask)
+        data = data.flatten('F')
+        data = data[~data.mask]
+        idx = np.random.randint(int(len(data) / 150), size=150)
+        image=np.zeros((150,150))
+        for i, id in enumerate(idx):
+            px = data[id * 150: id * 150 + 150]
+            image[i,:]=px
+
+        image=np.expand_dims(image,-1)
 
         processed_data.append(image)
 
@@ -570,11 +572,13 @@ def main(args):
 
             X_v = X_processed_ext[ix_valid]
             autoencoder = Autoencoder3D(latent_dimension, X_v.shape[-1],layer_activation,l1)
+
             autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='cosine_similarity')
+
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
                       epochs=90,
-                      batch_size=16,
+                      batch_size=128,
                       shuffle=True,
                       use_multiprocessing=True,
                       callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
@@ -654,7 +658,7 @@ if __name__ == "__main__":
     parser.add_argument('--augment-constant', type=int, default=2)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
-    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
+    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'relu'])
     parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.01,0.001,0.0001])
     parser.add_argument('--l1', type=float, nargs='+', default=[0.00001,0.0])
 
