@@ -32,7 +32,18 @@ from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, Early
 from tensorflow.keras import regularizers
 
 
+class CustomCosineLoss(tf.keras.losses.Loss):
 
+    def __init__(self,):
+        super().__init__()
+        self.loss= tf.keras.losses.CosineSimilarity()
+
+    def call(self, y_true, y_pred):
+        sh=y_true.shape
+        y_true = tf.keras.layers.Flatten()(y_true)
+        y_pred = tf.keras.layers.Flatten()(y_pred)
+        lo=self.loss(y_true,y_pred)
+        return lo
 
 class Autoencoder(keras.Model):
   def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
@@ -580,7 +591,7 @@ def main(args):
 
             X_v = X_processed_ext[ix_valid]
             autoencoder = Autoencoder(latent_dimension, X_v.shape[-1],layer_activation,l1)
-            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='cosine_similarity')
+            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss=CustomCosineLoss())
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
                       epochs=240,
