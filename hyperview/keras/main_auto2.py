@@ -163,7 +163,8 @@ def load_data(directory: str, file_path: str, istrain,args):
     )
     # in debug mode, only consider first 100 patches
     if args.debug:
-        all_files = all_files[:100]
+        all_files = all_files[:10]
+        if istrain: labels =labels[:10]
 
     for idx, file_name in enumerate(all_files):
         with np.load(file_name) as npz:
@@ -342,8 +343,8 @@ def predictions_and_submission_2(study,study_auto,auto_encoders, best_model, X_t
 
         X_test_ae = []
         for idy in range(len(X_test)):
-            X_test_ae.append(ae.encoder.predict(X_test[idy]).numpy())
-        X_test_ae=np.asarray(X_test_ae)
+            X_test_ae.append(ae.encoder.predict(np.expand_dims(X_test[idy],0)))
+        X_test_ae=np.concatenate(X_test_ae,0)
         pp = rf.predict(X_test_ae)
         predictions.append(pp)
 
@@ -510,12 +511,13 @@ def main(args):
                                                               verbosity=1))
             X_t_auto=[]
             for idy in range(len(X_t)):
-                X_t_auto.append(auto_encoders[i].encoder.predict(X_t[idy]).numpy())
-            X_t_auto=np.asarray(X_t_auto)
+                np.expand_dims(X_t[0], 0)
+                X_t_auto.append(auto_encoders[i].encoder.predict(np.expand_dims(X_t[idy], 0)))
+            X_t_auto=np.concatenate(X_t_auto,0)
             X_v_auto = []
             for idz in range(len(X_v)):
-                X_v_auto.append(auto_encoders[i].encoder.predict(X_v[idz]).numpy())
-            X_v_auto = np.asarray(X_v_auto)
+                X_v_auto.append(auto_encoders[i].encoder.predict(np.expand_dims(X_v[idz], 0)))
+            X_v_auto = np.concatenate(X_v_auto,0)
             model.fit(X_t_auto, y_t)
             random_forests.append(model)
             print(f'{reg_name} score: {model.score(X_v_auto, y_v)}')
@@ -539,7 +541,7 @@ def main(args):
         if mean_score < min_score:
             min_score=mean_score
             best_model=random_forests
-            predictions_and_submission_2(None,None,auto_encoders, best_model, X_test, cons, args,min_score)
+            predictions_and_submission_2(None,None,auto_encoders, best_model, X_test, cons, args, min_score)
 
         return mean_score
 
@@ -584,10 +586,10 @@ def main(args):
             autoencoder = Autoencoder3D(latent_dimension, X_v.shape[-1],layer_activation,l1)
 
             autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss='cosine_similarity')
-
+            #print(X_t.shape)
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
-                      epochs=120,
+                      epochs=128,
                       batch_size=128,
                       shuffle=True,
                       use_multiprocessing=True,
@@ -665,8 +667,8 @@ if __name__ == "__main__":
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
-    parser.add_argument('--n-trials', type=int, default=1)
-    parser.add_argument('--n-trials-auto', type=int, default=16)
+    parser.add_argument('--n-trials', type=int, default=256)
+    parser.add_argument('--n-trials-auto', type=int, default=1)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])

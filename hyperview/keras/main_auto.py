@@ -355,7 +355,7 @@ def predictions_and_submission_2(study,study_auto,auto_encoders, best_model, X_t
 
     predictions = []
     for rf,ae in zip(best_model,auto_encoders):
-        X_test_ae=ae.encoder(X_test).numpy()
+        X_test_ae=ae.encoder.predict(X_test)
         pp = rf.predict(X_test_ae)
         predictions.append(pp)
 
@@ -512,8 +512,8 @@ def main(args):
                                                               max_depth=max_depth,
                                                               n_estimators=n_estimators,
                                                               verbosity=1))
-            X_t = auto_encoders[i].encoder(X_t).numpy()
-            X_v = auto_encoders[i].encoder(X_v).numpy()
+            X_t = auto_encoders[i].encoder.predict(X_t)
+            X_v = auto_encoders[i].encoder.predict(X_v)
             model.fit(X_t, y_t)
             random_forests.append(model)
             print(f'{reg_name} score: {model.score(X_v, y_v)}')
