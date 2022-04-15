@@ -339,7 +339,11 @@ def predictions_and_submission_2(study,study_auto,auto_encoders, best_model, X_t
 
     predictions = []
     for rf,ae in zip(best_model,auto_encoders):
-        X_test_ae=ae.encoder(X_test).numpy()
+
+        X_test_ae = []
+        for idy in range(len(X_test)):
+            X_test_ae.append(ae.encoder.predict(X_test[idy]).numpy())
+        X_test_ae=np.asarray(X_test_ae)
         pp = rf.predict(X_test_ae)
         predictions.append(pp)
 
@@ -504,21 +508,21 @@ def main(args):
                                                               max_depth=max_depth,
                                                               n_estimators=n_estimators,
                                                               verbosity=1))
-            X_t_list=[]
+            X_t_auto=[]
             for idy in range(len(X_t)):
-                X_t_list.append(auto_encoders[i].encoder.predict(X_t[idy]).numpy())
-            X_t=np.array(X_t_list)
-            X_v_list = []
+                X_t_auto.append(auto_encoders[i].encoder.predict(X_t[idy]).numpy())
+            X_t_auto=np.asarray(X_t_auto)
+            X_v_auto = []
             for idz in range(len(X_v)):
-                X_v_list.append(auto_encoders[i].encoder.predict(X_v[idz]).numpy())
-            X_v = np.array(X_v_list)
-            model.fit(X_t, y_t)
+                X_v_auto.append(auto_encoders[i].encoder.predict(X_v[idz]).numpy())
+            X_v_auto = np.asarray(X_v_auto)
+            model.fit(X_t_auto, y_t)
             random_forests.append(model)
-            print(f'{reg_name} score: {model.score(X_v, y_v)}')
+            print(f'{reg_name} score: {model.score(X_v_auto, y_v)}')
 
             # predictions
-            y_hat = model.predict(X_v)
-            y_b = baseline.predict(X_v)
+            y_hat = model.predict(X_v_auto)
+            y_b = baseline.predict(X_v_auto)
 
             y_hat_bl.append(y_b)
             y_hat_rf.append(y_hat)
@@ -600,6 +604,8 @@ def main(args):
         if mean_score < min_auto:
             min_auto = mean_score
             auto_encoders = auto_encoder_list
+            for idx, auto_enc in enumerate(auto_encoder_list):
+                auto_enc.save_weights(args.model_dir+"auto_encoder_best_{}.h5".format(idx))
 
         return mean_score
 
