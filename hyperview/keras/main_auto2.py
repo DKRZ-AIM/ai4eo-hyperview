@@ -481,8 +481,8 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            #reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
-            reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+            reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
+            #reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
 
             print(f"Training on {reg_name}")
             if reg_name == "RandomForest":
@@ -504,8 +504,14 @@ def main(args):
                                                               max_depth=max_depth,
                                                               n_estimators=n_estimators,
                                                               verbosity=1))
-            X_t = auto_encoders[i].encoder(X_t).numpy()
-            X_v = auto_encoders[i].encoder(X_v).numpy()
+            X_t_list=[]
+            for idy in range(len(X_t)):
+                X_t_list.append(auto_encoders[i].encoder.predict(X_t[idy]).numpy())
+            X_t=np.array(X_t_list)
+            X_v_list = []
+            for idz in range(len(X_v)):
+                X_v_list.append(auto_encoders[i].encoder.predict(X_v[idz]).numpy())
+            X_v = np.array(X_v_list)
             model.fit(X_t, y_t)
             random_forests.append(model)
             print(f'{reg_name} score: {model.score(X_v, y_v)}')
@@ -653,14 +659,14 @@ if __name__ == "__main__":
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
-    parser.add_argument('--n-trials', type=int, default=128)
+    parser.add_argument('--n-trials', type=int, default=1)
     parser.add_argument('--n-trials-auto', type=int, default=16)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
-    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128,512,1024])
-    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'relu'])
-    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.01,0.001,0.0001])
-    parser.add_argument('--l1', type=float, nargs='+', default=[0.001,0.00001,0.0])
+    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
+    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish'])
+    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.0001])
+    parser.add_argument('--l1', type=float, nargs='+', default=[0.0])
 
     args = parser.parse_args()
 
