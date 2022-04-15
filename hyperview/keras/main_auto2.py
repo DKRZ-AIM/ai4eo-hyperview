@@ -604,9 +604,10 @@ def main(args):
             #print(X_t.shape)
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
-                      epochs=128,
+                      epochs=160,
                       batch_size=128,
                       shuffle=True,
+                      verbose=0,
                       use_multiprocessing=True,
                       callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
 

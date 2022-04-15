@@ -596,6 +596,7 @@ def main(args):
                       validation_split=0.2,
                       epochs=240,
                       batch_size=128,
+                      verbose=0,
                       shuffle=True,
                       use_multiprocessing=True,
                       callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
