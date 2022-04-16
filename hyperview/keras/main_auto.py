@@ -45,6 +45,153 @@ class CustomCosineLoss(tf.keras.losses.Loss):
         lo=self.loss(y_true,y_pred)
         return lo
 
+class ASPP(layers.Layer):
+    def __init__(self, filter, activation,initializer="he_normal", **kwargs):
+        super(ASPP, self).__init__(**kwargs)
+        self.initializer = keras.initializers.get(initializer)
+        self.filter=filter
+        self.layer_activation = activation
+
+    def build(self, input_shape):
+        output_dim = input_shape
+        self.avg=layers.AveragePooling1D(pool_size=input_shape[1])
+        self.c1=layers.Conv1D(self.filter, 1,activation=self.layer_activation, padding="same")
+        self.b1=layers.BatchNormalization()
+        self.u1=layers.UpSampling1D(input_shape[1])
+
+        self.c2=layers.Conv1D(self.filter, 1, dilation_rate=1,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b2 = layers.BatchNormalization()
+
+        self.c3=layers.Conv1D(self.filter, 3, dilation_rate=6,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b3 = layers.BatchNormalization()
+
+        self.c4=layers.Conv1D(self.filter, 3, dilation_rate=12,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b4 = layers.BatchNormalization()
+
+        self.c5=layers.Conv1D(self.filter, 3, dilation_rate=18,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b5 = layers.BatchNormalization()
+
+        self.c=layers.Conv1D(self.filter, 1, dilation_rate=1,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b = layers.BatchNormalization()
+
+    def call(self, x):
+        y1 = self.avg(x)
+
+        y1 = self.c1(y1)
+        y1 = self.b1(y1)
+        y1 = self.u1(y1)
+
+        y2 = self.c2(x)
+        y2 = self.b2(y2)
+
+        y3 = self.c3(x)
+        y3 = self.b3(y3)
+
+        y4 = self.c4(x)
+        y4 = self.b4(y4)
+
+        y5 = self.c5(x)
+        y5 = self.b5(y5)
+
+        y = layers.Concatenate()([y1, y2, y3, y4, y5])
+
+        y = self.c(y)
+        y = self.b(y)
+
+        return y
+
+    def get_config(self):
+        # Implement get_config to enable serialization. This is optional.
+        base_config = super(ASPP, self).get_config()
+
+        config = {"initializer": keras.initializers.serialize(self.initializer),
+                  "filter":self.filter,
+                  'layer_activation':self.layer_activation}
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+class Autoencoder2(keras.Model):
+  def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
+    super(Autoencoder2, self).__init__()
+    self.latent_dim = latent_dim
+    self.output_dim=output_dim
+    self.encoder = tf.keras.Sequential([
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        ASPP(64, activation=layer_activation),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.MaxPooling1D(2, padding='same'),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        ASPP(64, activation=layer_activation),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.MaxPooling1D( 3, padding='same'),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        ASPP(64, activation=layer_activation),
+        #layers.Conv2D(64, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.MaxPooling1D( 5, padding='same'),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(64, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Flatten(),
+        layers.Dense(320, activation=layer_activation),
+        layers.Dropout(0.25),
+        layers.Dense(320, activation=layer_activation),
+        layers.Dropout(0.25),
+        layers.Dense(latent_dim, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg))
+    ])
+    self.decoder = tf.keras.Sequential([
+        layers.Dense(320, activation=layer_activation),
+        layers.Reshape(( 5, 64)),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.UpSampling1D(5),
+        ASPP(64, activation=layer_activation),
+        #layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.UpSampling1D(3),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        ASPP(64, activation=layer_activation),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.UpSampling1D(2),
+        ASPP(64, activation=layer_activation),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(output_dim, 3, activation='linear', padding='same'),
+    ])
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    decoded = self.decoder(encoded)
+    return decoded
+
+
 class Autoencoder(keras.Model):
   def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
     super(Autoencoder, self).__init__()
@@ -133,7 +280,8 @@ def load_data(directory: str, file_path: str, istrain,args):
     )
     # in debug mode, only consider first 100 patches
     if args.debug:
-        all_files = all_files[:100]
+        all_files = all_files[:10]
+        if istrain: labels=labels[:10]
 
     for idx, file_name in enumerate(all_files):
         with np.load(file_name) as npz:
@@ -270,7 +418,35 @@ def preprocess(data_list, mask_list):
 
         cos = dct(arr)
 
-        out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, real, imag, reals, imags, cDw2, cAw2,cos], -1)
+        out1 = np.concatenate([np.expand_dims(arr,-1),
+                              np.expand_dims(dXdl,-1),
+                              np.expand_dims(d2Xdl2,-1),
+                              np.expand_dims(d3Xdl3,-1),
+                              np.expand_dims(dXds1,-1),
+                              np.expand_dims(s0,-1),
+                              np.expand_dims(s1,-1),
+                              np.expand_dims(s2,-1),
+                              np.expand_dims(s3,-1),
+                              np.expand_dims(s4,-1),
+                              np.expand_dims(real,-1),
+                              np.expand_dims(imag,-1),
+                              np.expand_dims(reals,-1),
+                              np.expand_dims(imags,-1),
+                              np.expand_dims(cDw2,-1),
+                              np.expand_dims(cAw2,-1),
+                              np.expand_dims(cos,-1)], -1)
+
+        data = data.flatten('F')
+        data = data[~data.mask]
+        idx = np.random.randint(int(len(data) / 150), size=15)
+        out2 = np.zeros((150, 15))
+        for i, id in enumerate(idx):
+            px = data[id * 150: id * 150 + 150]
+            out2[:, i] = px
+
+
+        out=np.concatenate([out1,out2],-1)
+
         processed_data.append(out)
 
     return np.array(processed_data)
@@ -366,7 +542,10 @@ def predictions_and_submission_2(study,study_auto,auto_encoders, best_model, X_t
 
     predictions = []
     for rf,ae in zip(best_model,auto_encoders):
-        X_test_ae=ae.encoder.predict(X_test)
+        X_test_ae = []
+        for idy in range(len(X_test)):
+            X_test_ae.append(ae.encoder.predict(np.expand_dims(X_test[idy], 0)))
+        X_test_ae = np.concatenate(X_test_ae, 0)
         pp = rf.predict(X_test_ae)
         predictions.append(pp)
 
@@ -439,12 +618,12 @@ def main(args):
     #X_test_normalized = np.zeros(X_test.shape)
 
     #min_max_scaler_list = []
-    for i in range(int(X_processed.shape[-1] / 150)):
+    for i in range(int(X_processed.shape[-1])):
         min_max_scaler = preprocessing.RobustScaler()
-        min_max_scaler.fit(np.concatenate((X_processed[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
-        X_processed[:, 150 * i:150 * i + 150] = min_max_scaler.transform(X_processed[:, 150 * i:150 * i + 150])
-        X_aug_processed[:,150*i:150*i+150] = min_max_scaler.transform(X_aug_processed[:,150*i:150*i+150])
-        X_test[:, 150 * i:150 * i + 150] = min_max_scaler.transform(X_test[:, 150 * i:150 * i + 150])
+        min_max_scaler.fit(np.concatenate((X_processed[:,:, i], X_test[:,:, i])))
+        X_processed[:,:, i] = min_max_scaler.transform(X_processed[:,:, i])
+        X_aug_processed[:,:, i] = min_max_scaler.transform(X_aug_processed[:,:, i])
+        X_test[:,:, i] = min_max_scaler.transform(X_test[:,:, i])
         #min_max_scaler_list.append(min_max_scaler)
 
 
@@ -523,15 +702,22 @@ def main(args):
                                                               max_depth=max_depth,
                                                               n_estimators=n_estimators,
                                                               verbosity=1))
-            X_t = auto_encoders[i].encoder.predict(X_t)
-            X_v = auto_encoders[i].encoder.predict(X_v)
-            model.fit(X_t, y_t)
+            X_t_auto = []
+            for idy in range(len(X_t)):
+                np.expand_dims(X_t[0], 0)
+                X_t_auto.append(auto_encoders[i].encoder.predict(np.expand_dims(X_t[idy], 0)))
+            X_t_auto = np.concatenate(X_t_auto, 0)
+            X_v_auto = []
+            for idz in range(len(X_v)):
+                X_v_auto.append(auto_encoders[i].encoder.predict(np.expand_dims(X_v[idz], 0)))
+            X_v_auto = np.concatenate(X_v_auto, 0)
+            model.fit(X_t_auto, y_t)
             random_forests.append(model)
-            print(f'{reg_name} score: {model.score(X_v, y_v)}')
+            print(f'{reg_name} score: {model.score(X_v_auto, y_v)}')
 
             # predictions
-            y_hat = model.predict(X_v)
-            y_b = baseline.predict(X_v)
+            y_hat = model.predict(X_v_auto)
+            y_b = baseline.predict(X_v_auto)
 
             y_hat_bl.append(y_b)
             y_hat_rf.append(y_hat)
@@ -590,13 +776,13 @@ def main(args):
             l1 = trial.suggest_categorical('l1', args.l1)
 
             X_v = X_processed_ext[ix_valid]
-            autoencoder = Autoencoder(latent_dimension, X_v.shape[-1],layer_activation,l1)
+            autoencoder = Autoencoder2(latent_dimension, X_v.shape[-1],layer_activation,l1)
             autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss=CustomCosineLoss())
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
-                      epochs=240,
+                      epochs=256,
                       batch_size=128,
-                      verbose=0,
+                      verbose=1,
                       shuffle=True,
                       use_multiprocessing=True,
                       callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
@@ -668,17 +854,17 @@ if __name__ == "__main__":
     parser.add_argument('--folds', type=int, default=5)
     parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
-    parser.add_argument('--n-estimators', type=int, nargs='+', default=[256, 1024])
+    parser.add_argument('--n-estimators', type=int, nargs='+', default=[64, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
-    parser.add_argument('--n-trials', type=int, default=256)
-    parser.add_argument('--n-trials-auto', type=int, default=36)
+    parser.add_argument('--n-trials', type=int, default=512)
+    parser.add_argument('--n-trials-auto', type=int, default=24)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
-    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 , 256, 512])
+    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 , 256])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
     parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.01,0.001,0.0001])
-    parser.add_argument('--l1', type=float, nargs='+', default=[0.01, 0.001, 0.0001, 0.00001, 0.0])
+    parser.add_argument('--l1', type=float, nargs='+', default=[0.0001, 0.00001, 0.0])
     args = parser.parse_args()
 
     # output = os.path.join(args.submission_dir, f"out_{date_time}")

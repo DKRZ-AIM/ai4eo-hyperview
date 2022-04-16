@@ -45,6 +45,71 @@ class CustomCosineLoss(tf.keras.losses.Loss):
         lo=self.loss(y_true,y_pred)
         return lo
 
+class ASPP(layers.Layer):
+    def __init__(self, filter, activation,initializer="he_normal", **kwargs):
+        super(ASPP, self).__init__(**kwargs)
+        self.initializer = keras.initializers.get(initializer)
+        self.filter=filter
+        self.layer_activation = activation
+
+    def build(self, input_shape):
+        output_dim = input_shape
+        self.avg=layers.AveragePooling2D(pool_size=(input_shape[1], 1))
+        self.c1=layers.Conv2D(self.filter, 1,activation=self.layer_activation, padding="same")
+        self.b1=layers.BatchNormalization()
+        self.u1=layers.UpSampling2D((input_shape[1], 1), interpolation='bilinear')
+
+        self.c2=layers.Conv2D(self.filter, 1, dilation_rate=1,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b2 = layers.BatchNormalization()
+
+        self.c3=layers.Conv2D(self.filter, (1,3), dilation_rate=6,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b3 = layers.BatchNormalization()
+
+        self.c4=layers.Conv2D(self.filter, (1,3), dilation_rate=12,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b4 = layers.BatchNormalization()
+
+        self.c5=layers.Conv2D(self.filter, (1,3), dilation_rate=18,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b5 = layers.BatchNormalization()
+
+        self.c=layers.Conv2D(self.filter, 1, dilation_rate=1,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b = layers.BatchNormalization()
+
+    def call(self, x):
+        y1 = self.avg(x)
+
+        y1 = self.c1(y1)
+        y1 = self.b1(y1)
+        y1 = self.u1(y1)
+
+        y2 = self.c2(x)
+        y2 = self.b2(y2)
+
+        y3 = self.c3(x)
+        y3 = self.b3(y3)
+
+        y4 = self.c4(x)
+        y4 = self.b4(y4)
+
+        y5 = self.c5(x)
+        y5 = self.b5(y5)
+
+        y = layers.Concatenate()([y1, y2, y3, y4, y5])
+
+        y = self.c(y)
+        y = self.b(y)
+
+        return y
+
+    def get_config(self):
+        # Implement get_config to enable serialization. This is optional.
+        base_config = super(ASPP, self).get_config()
+
+        config = {"initializer": keras.initializers.serialize(self.initializer),
+                  "filter":self.filter,
+                  'layer_activation':self.layer_activation}
+        return dict(list(base_config.items()) + list(config.items()))
+
+
 class Autoencoder3D(keras.Model):
   def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
     super(Autoencoder3D, self).__init__()
@@ -54,14 +119,16 @@ class Autoencoder3D(keras.Model):
       layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
       layers.Dropout(0.25),
       layers.BatchNormalization(),
-      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      ASPP(64, activation=layer_activation),
+      #layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
       layers.Dropout(0.25),
       layers.BatchNormalization(),
       layers.MaxPooling2D((2,2), padding='same'),
       layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
       layers.Dropout(0.25),
       layers.BatchNormalization(),
-      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      ASPP(64, activation=layer_activation),
+      #layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
       layers.Dropout(0.25),
       layers.BatchNormalization(),
       layers.MaxPooling2D((3,3), padding='same'),
@@ -99,14 +166,16 @@ class Autoencoder3D(keras.Model):
       layers.Dropout(0.25),
       layers.BatchNormalization(),
       layers.UpSampling2D((3, 3)),
-      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      #layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      ASPP(64, activation=layer_activation),
       layers.Dropout(0.25),
       layers.BatchNormalization(),
       layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
       layers.Dropout(0.25),
       layers.BatchNormalization(),
       layers.UpSampling2D((2, 2)),
-      layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+      ASPP(64, activation=layer_activation),
+      #layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
       layers.Dropout(0.25),
       layers.BatchNormalization(),
       layers.Conv2D(32, (1, 3), activation=layer_activation, padding='same'),
@@ -354,7 +423,6 @@ def predictions_and_submission_2(study,study_auto,auto_encoders, best_model, X_t
 
     predictions = []
     for rf,ae in zip(best_model,auto_encoders):
-
         X_test_ae = []
         for idy in range(len(X_test)):
             X_test_ae.append(ae.encoder.predict(np.expand_dims(X_test[idy],0)))
@@ -604,8 +672,8 @@ def main(args):
             #print(X_t.shape)
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
-                      epochs=160,
-                      batch_size=128,
+                      epochs=16,
+                      batch_size=12,
                       shuffle=True,
                       verbose=0,
                       use_multiprocessing=True,
