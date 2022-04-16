@@ -21,8 +21,212 @@ import optuna
 from optuna.samplers import TPESampler
 from sklearn import preprocessing
 from scipy.fftpack import dct
-from sklearn.preprocessing import PowerTransformer
 import sys
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense,Dropout, BatchNormalization
+from tensorflow.keras.optimizers import Nadam, Adam,SGD
+from tensorflow.keras import layers
+from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
+from tensorflow.keras import regularizers
+
+
+class CustomCosineLoss(tf.keras.losses.Loss):
+
+    def __init__(self,):
+        super().__init__()
+        self.loss= tf.keras.losses.CosineSimilarity()
+
+    def call(self, y_true, y_pred):
+        sh=y_true.shape
+        y_true = tf.keras.layers.Flatten()(y_true)
+        y_pred = tf.keras.layers.Flatten()(y_pred)
+        lo=self.loss(y_true,y_pred)
+        return lo
+
+class ASPP(layers.Layer):
+    def __init__(self, filter, activation,initializer="he_normal", **kwargs):
+        super(ASPP, self).__init__(**kwargs)
+        self.initializer = keras.initializers.get(initializer)
+        self.filter=filter
+        self.layer_activation = activation
+
+    def build(self, input_shape):
+        output_dim = input_shape
+        self.avg=layers.AveragePooling1D(pool_size=input_shape[1])
+        self.c1=layers.Conv1D(self.filter, 1,activation=self.layer_activation, padding="same")
+        self.b1=layers.BatchNormalization()
+        self.u1=layers.UpSampling1D(input_shape[1])
+
+        self.c2=layers.Conv1D(self.filter, 1, dilation_rate=1,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b2 = layers.BatchNormalization()
+
+        self.c3=layers.Conv1D(self.filter, 3, dilation_rate=6,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b3 = layers.BatchNormalization()
+
+        self.c4=layers.Conv1D(self.filter, 3, dilation_rate=12,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b4 = layers.BatchNormalization()
+
+        self.c5=layers.Conv1D(self.filter, 3, dilation_rate=18,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b5 = layers.BatchNormalization()
+
+        self.c=layers.Conv1D(self.filter, 1, dilation_rate=1,activation=self.layer_activation, padding="same", use_bias=False)
+        self.b = layers.BatchNormalization()
+
+    def call(self, x):
+        y1 = self.avg(x)
+
+        y1 = self.c1(y1)
+        y1 = self.b1(y1)
+        y1 = self.u1(y1)
+
+        y2 = self.c2(x)
+        y2 = self.b2(y2)
+
+        y3 = self.c3(x)
+        y3 = self.b3(y3)
+
+        y4 = self.c4(x)
+        y4 = self.b4(y4)
+
+        y5 = self.c5(x)
+        y5 = self.b5(y5)
+
+        y = layers.Concatenate()([y1, y2, y3, y4, y5])
+
+        y = self.c(y)
+        y = self.b(y)
+
+        return y
+
+    def get_config(self):
+        # Implement get_config to enable serialization. This is optional.
+        base_config = super(ASPP, self).get_config()
+
+        config = {"initializer": keras.initializers.serialize(self.initializer),
+                  "filter":self.filter,
+                  'layer_activation':self.layer_activation}
+        return dict(list(base_config.items()) + list(config.items()))
+
+
+class Autoencoder2(keras.Model):
+  def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
+    super(Autoencoder2, self).__init__()
+    self.latent_dim = latent_dim
+    self.output_dim=output_dim
+    self.encoder = tf.keras.Sequential([
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        ASPP(64, activation=layer_activation),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.MaxPooling1D(2, padding='same'),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        ASPP(64, activation=layer_activation),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.MaxPooling1D( 3, padding='same'),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        ASPP(64, activation=layer_activation),
+        #layers.Conv2D(64, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.MaxPooling1D( 5, padding='same'),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(64, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Flatten(),
+        layers.Dense(320, activation=layer_activation),
+        layers.Dropout(0.25),
+        layers.Dense(320, activation=layer_activation),
+        layers.Dropout(0.25),
+        layers.Dense(latent_dim, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg))
+    ])
+    self.decoder = tf.keras.Sequential([
+        layers.Dense(320, activation=layer_activation),
+        layers.Reshape(( 5, 64)),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.UpSampling1D(5),
+        ASPP(64, activation=layer_activation),
+        #layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.UpSampling1D(3),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        ASPP(64, activation=layer_activation),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.UpSampling1D(2),
+        ASPP(64, activation=layer_activation),
+        # layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dropout(0.25),
+        layers.BatchNormalization(),
+        layers.Conv1D(output_dim, 3, activation='linear', padding='same'),
+    ])
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    decoded = self.decoder(encoded)
+    return decoded
+
+
+class Autoencoder(keras.Model):
+  def __init__(self, latent_dim, output_dim,layer_activation,l1_reg):
+    super(Autoencoder, self).__init__()
+    self.latent_dim = latent_dim
+    self.output_dim=output_dim
+    self.encoder = tf.keras.Sequential([
+      layers.Dense(output_dim, activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(output_dim, activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.Dense(int(output_dim/2), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.Dense(int(output_dim/4), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(latent_dim, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg)),
+
+    ])
+    self.decoder = tf.keras.Sequential([
+      layers.Dense(int(output_dim/4), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.Dense(int(output_dim/2), activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.BatchNormalization(),
+      layers.Dense(output_dim, activation=layer_activation),
+      layers.Dropout(0.25),
+      layers.Dense(output_dim, activation='linear'),
+    ])
+
+  def call(self, x):
+    encoded = self.encoder(x)
+    decoded = self.decoder(encoded)
+    return decoded
 
 
 class BaselineRegressor():
@@ -214,7 +418,35 @@ def preprocess(data_list, mask_list):
 
         cos = dct(arr)
 
-        out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, real, imag, reals, imags, cDw2, cAw2,cos], -1)
+        out1 = np.concatenate([np.expand_dims(arr,-1),
+                              np.expand_dims(dXdl,-1),
+                              np.expand_dims(d2Xdl2,-1),
+                              np.expand_dims(d3Xdl3,-1),
+                              np.expand_dims(dXds1,-1),
+                              np.expand_dims(s0,-1),
+                              np.expand_dims(s1,-1),
+                              np.expand_dims(s2,-1),
+                              np.expand_dims(s3,-1),
+                              np.expand_dims(s4,-1),
+                              np.expand_dims(real,-1),
+                              np.expand_dims(imag,-1),
+                              np.expand_dims(reals,-1),
+                              np.expand_dims(imags,-1),
+                              np.expand_dims(cDw2,-1),
+                              np.expand_dims(cAw2,-1),
+                              np.expand_dims(cos,-1)], -1)
+
+        data = data.flatten('F')
+        data = data[~data.mask]
+        idx = np.random.randint(int(len(data) / 150), size=15)
+        out2 = np.zeros((150, 15))
+        for i, id in enumerate(idx):
+            px = data[id * 150: id * 150 + 150]
+            out2[:, i] = px
+
+
+        out=np.concatenate([out1,out2],-1)
+
         processed_data.append(out)
 
     return np.array(processed_data)
@@ -306,11 +538,15 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     return predictions
 
 
-def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score):
+def predictions_and_submission_2(study,study_auto,auto_encoders, best_model, X_test, cons, args,min_score):
 
     predictions = []
-    for rf in best_model:
-        pp = rf.predict(X_test)
+    for rf,ae in zip(best_model,auto_encoders):
+        X_test_ae = []
+        for idy in range(len(X_test)):
+            X_test_ae.append(ae.encoder.predict(np.expand_dims(X_test[idy], 0)))
+        X_test_ae = np.concatenate(X_test_ae, 0)
+        pp = rf.predict(X_test_ae)
         predictions.append(pp)
 
     predictions = np.asarray(predictions)
@@ -319,19 +555,29 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score
     predictions = predictions * np.array(cons[:len(args.col_ix)])
 
 
-    feats = {}
-    importances = best_model[-1].feature_importances_
-    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
-                     'reals','imags', 'cDw2', 'cAw2', 'cos']
-    for feature, importance in zip(feature_names, importances):
-        feats[feature] = importance
-    feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
-    for feat in feats:
-        print(f'{feat[0]}: {feat[1]}')
+    # print feature importances
+    #feats = {}
+    #importances = best_model[-1].feature_importances_
+    #feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
+    #                 'reals','imags', 'cDw2', 'cAw2', 'cos']
+    #for feature, importance in zip(feature_names, importances):
+    #    feats[feature] = importance
+    #feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
+    #for feat in feats:
+    #    print(f'{feat[0]}: {feat[1]}')
 
     submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
     print(submission.head())
-    if study is not None:
+
+    if study is not None and study_auto is not None:
+        submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['regressor']}_" \
+                                                            f"lr{study_auto.best_params['learning_rate']}_" \
+                                                            f"latent_dim={study_auto.best_params['latent_dimension']}_activation={study_auto.best_params['layer_activation']}_" \
+                                                            f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
+                                                            f"minsl={study.best_params['min_samples_leaf']}_"f"aug_con={study.best_params['augment_constant']}_"f"aug_par={study.best_params['augment_partition']}.csv"),
+                          index_label="sample_index")
+
+    elif study is not None:
         submission.to_csv(os.path.join(args.submission_dir, f"submission_{study.best_params['regressor']}_" \
                                                             f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_" \
                                                             f"minsl={study.best_params['min_samples_leaf']}_"f"aug_con={study.best_params['augment_constant']}_"f"aug_par={study.best_params['augment_partition']}.csv"),index_label="sample_index")
@@ -361,13 +607,24 @@ def main(args):
     print(f"test data size: {len(X_test)}\n")
 
     print('Preprocess training data...')
-    X_train = preprocess(X_train, M_train)
-    X_aug_train = preprocess(X_aug_train, M_aug_train)
+    X_processed = preprocess(X_train, M_train)
+    X_aug_processed = preprocess(X_aug_train, M_aug_train)
 
     print('preprocess test data ...')
     X_test = preprocess(X_test, M_test)
 
+    #X_processed_normalized = np.zeros(X_processed.shape)
+    #X_aug_processed_normalized=np.zeros(X_aug_processed.shape)
+    #X_test_normalized = np.zeros(X_test.shape)
 
+    #min_max_scaler_list = []
+    #for i in range(int(X_processed.shape[-1])):
+        #min_max_scaler = preprocessing.RobustScaler()
+        #min_max_scaler.fit(np.concatenate((X_processed[:,:, i], X_test[:,:, i])))
+        #X_processed[:,:, i] = min_max_scaler.transform(X_processed[:,:, i])
+        #X_aug_processed[:,:, i] = min_max_scaler.transform(X_aug_processed[:,:, i])
+        #X_test[:,:, i] = min_max_scaler.transform(X_test[:,:, i])
+        #min_max_scaler_list.append(min_max_scaler)
 
 
     # selected set of labels
@@ -379,46 +636,14 @@ def main(args):
     global best_model
     best_model = None
     global min_score
-    global X_test_normalized
     min_score = 10
     def objective(trial):
         global best_model
         global min_score
-        global X_test_normalized
 
         print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
         kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
-
-        X_train_normalized = np.zeros(X_train.shape)
-        X_aug_train_normalized=np.zeros(X_aug_train.shape)
-        X_test_normalized = np.zeros(X_test.shape)
-
-        # min_max_scaler_list = []
-        # https://machinelearningmastery.com/power-transforms-with-scikit-learn/
-        scaler_type = trial.suggest_categorical("scaler", ["robust", "minmax","None"])
-        power_type = trial.suggest_categorical("power", ["yeo_johnson", "box_cox","None"])
-
-        for i in range(int(X_train.shape[-1] / 150)):
-            if scaler_type=='robust': scaler = preprocessing.RobustScaler()
-            elif scaler_type=='minmax': scaler = preprocessing.MinMaxScaler((1,2))
-            else: scaler=None
-            if scaler is not None:
-                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
-                X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
-                X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_aug_train[:, 150 * i:150 * i + 150])
-                X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
-
-            if power_type=='yeo_johnson': power = PowerTransformer(method='yeo-johnson')
-            elif power_type=='box_cox': power = PowerTransformer(method='box-cox')
-            else: power=None
-            if power is not None:
-                power.fit(np.concatenate((X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
-                X_train_normalized[:, 150 * i:150 * i + 150] = power.transform(X_train_normalized[:, 150 * i:150 * i + 150])
-                X_aug_train_normalized[:, 150 * i:150 * i + 150] = power.transform(X_aug_train_normalized[:, 150 * i:150 * i + 150])
-                X_test_normalized[:, 150 * i:150 * i + 150] = power.transform(X_test_normalized[:, 150 * i:150 * i + 150])
-
-            # min_max_scaler_list.append(min_max_scaler)
 
         random_forests = []
         baseline_regressors = []
@@ -431,13 +656,13 @@ def main(args):
 
             print(f'fold {i}:')
 
-            X_t = X_train_normalized[ix_train]
+            X_t = X_processed[ix_train]
             y_t = y_train_col[ix_train]
             augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
             augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1], log=True)
 
             for idy in range(augment_constant):
-                X_ta_1 = X_aug_train_normalized[ix_train+(idy*len(y_train))]
+                X_ta_1 = X_aug_processed[ix_train+(idy*len(y_train))]
                 y_ta_1 = y_aug_train_col[ix_train+(idy*len(y_train))]
                 X_t=np.concatenate((X_t,X_ta_1[-augment_partition:]),axis=0)
                 y_t=np.concatenate((y_t,y_ta_1[-augment_partition:]),axis=0)
@@ -446,7 +671,7 @@ def main(args):
             if args.mix_aug:
                 X_t, y_t = mixing_augmentation(X_t, y_t)
 
-            X_v = X_train_normalized[ix_valid]
+            X_v = X_processed[ix_valid]
             y_v = y_train_col[ix_valid]
 
             # baseline
@@ -477,14 +702,22 @@ def main(args):
                                                               max_depth=max_depth,
                                                               n_estimators=n_estimators,
                                                               verbosity=1))
-
-            model.fit(X_t, y_t)
+            X_t_auto = []
+            for idy in range(len(X_t)):
+                np.expand_dims(X_t[0], 0)
+                X_t_auto.append(auto_encoders[i].encoder.predict(np.expand_dims(X_t[idy], 0)))
+            X_t_auto = np.concatenate(X_t_auto, 0)
+            X_v_auto = []
+            for idz in range(len(X_v)):
+                X_v_auto.append(auto_encoders[i].encoder.predict(np.expand_dims(X_v[idz], 0)))
+            X_v_auto = np.concatenate(X_v_auto, 0)
+            model.fit(X_t_auto, y_t)
             random_forests.append(model)
-            print(f'{reg_name} score: {model.score(X_v, y_v)}')
+            print(f'{reg_name} score: {model.score(X_v_auto, y_v)}')
 
             # predictions
-            y_hat = model.predict(X_v)
-            y_b = baseline.predict(X_v)
+            y_hat = model.predict(X_v_auto)
+            y_b = baseline.predict(X_v_auto)
 
             y_hat_bl.append(y_b)
             y_hat_rf.append(y_hat)
@@ -501,13 +734,79 @@ def main(args):
         if mean_score < min_score:
             min_score=mean_score
             best_model=random_forests
-            predictions_and_submission_2(None, best_model, X_test_normalized, cons, args,min_score)
+            predictions_and_submission_2(None,None,auto_encoders, best_model, X_test, cons, args,min_score)
 
         return mean_score
 
+    global auto_encoders
+    auto_encoders = None
+    global min_auto
+    min_auto = 10
+    def objective2(trial):
+        auto_encoder_list = []
+        global auto_encoders
+        global min_auto
+        scores = []
+
+        print(f"\nTRIAL NUMBER: {trial.number}\n")
+        # training
+        kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
+
+        #augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
+        #augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0],
+        #                                      args.augment_partition[1], log=True)
+        # X_aug_processed_split = np.vsplit(X_aug_processed, 5)
+
+        X_processed_ext = np.concatenate((X_processed, X_test), axis=0)
+
+
+        for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(X_processed_ext)))):
+            print(f'fold {i}:')
+            X_t = X_processed_ext[ix_train]
+
+            t_indices=ix_train < len(X_processed)
+            X_aug_processed_split=np.vsplit(X_aug_processed, args.augment_constant)
+            for X_aug in X_aug_processed_split:
+                idx=ix_train[t_indices]
+                X_t=np.concatenate((X_t,X_aug[idx]),axis=0)
+
+            latent_dimension = trial.suggest_categorical('latent_dimension', args.latent_dimension)
+            learning_rate = trial.suggest_categorical('learning_rate', args.learning_rate)
+            layer_activation = trial.suggest_categorical('layer_activation', args.layer_activation)
+            l1 = trial.suggest_categorical('l1', args.l1)
+
+            X_v = X_processed_ext[ix_valid]
+            autoencoder = Autoencoder2(latent_dimension, X_v.shape[-1],layer_activation,l1)
+            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss=CustomCosineLoss())
+            autoencoder.fit(X_t, X_t,
+                      validation_split=0.2,
+                      epochs=256,
+                      batch_size=512,
+                      verbose=1,
+                      shuffle=True,
+                      use_multiprocessing=True,
+                      callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
+
+            auto_encoder_list.append(autoencoder)
+            val_loss = autoencoder.evaluate(X_v,X_v)
+            scores.append(val_loss)
+
+        print("END TRAINING")
+        # final score
+        mean_score = np.mean(np.array(scores))
+        print(f'mean score: {mean_score}\n')
+        if mean_score < min_auto:
+            min_auto = mean_score
+            auto_encoders = auto_encoder_list
+
+        return mean_score
+
+    study_auto = optuna.create_study(sampler=TPESampler(), direction='minimize')
+    study_auto.optimize(objective2, n_trials=args.n_trials_auto)
+
     study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
-    predictions_and_submission_2(study, best_model, X_test_normalized, cons, args,min_score)
+    predictions_and_submission_2(study,study_auto, auto_encoders,best_model, X_test, cons, args,min_score)
 
     # save study
     #final_model = study.best_params["regressor"]
@@ -559,9 +858,13 @@ if __name__ == "__main__":
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=512)
+    parser.add_argument('--n-trials-auto', type=int, default=24)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
-
+    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 , 256])
+    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
+    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001,0.0001])
+    parser.add_argument('--l1', type=float, nargs='+', default=[0.0001, 0.00001, 0.0])
     args = parser.parse_args()
 
     # output = os.path.join(args.submission_dir, f"out_{date_time}")
