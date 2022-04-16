@@ -850,10 +850,10 @@ def main(args):
                       validation_split=0.2,
                       epochs=256,
                       batch_size=512,
-                      verbose=1,
+                      verbose=0,
                       shuffle=True,
                       use_multiprocessing=True,
-                      callbacks=[ReduceLROnPlateau(verbose=1, factor=0.5, patience=15),EarlyStopping(patience=40)])
+                      callbacks=[ReduceLROnPlateau(verbose=0, factor=0.5, patience=15),EarlyStopping(patience=40)])
 
             auto_encoder_list.append(autoencoder)
             val_loss = autoencoder.evaluate(X_v,X_v)
@@ -868,6 +868,8 @@ def main(args):
             auto_encoders = auto_encoder_list
             best_power_type=power_type
             best_scaler_type=scaler_type
+            for idx, auto_enc in enumerate(auto_encoder_list):
+                auto_enc.save_weights(args.model_dir+"auto_encoder_best_{}.h5".format(idx))
 
         return mean_score
 
