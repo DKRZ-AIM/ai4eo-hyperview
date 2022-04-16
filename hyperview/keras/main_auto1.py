@@ -875,7 +875,7 @@ def main(args):
             min_auto = mean_score
             auto_encoders = auto_encoder_list
             best_power_type=power_type
-            best_scaler_type=best_scaler_type
+            best_scaler_type=scaler_type
 
         return mean_score
 
