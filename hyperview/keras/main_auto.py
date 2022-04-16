@@ -379,12 +379,12 @@ def main(args):
     global best_model
     best_model = None
     global min_score
-    global X_test_normalized
     min_score = 10
+    global X_test_normalized_best
     def objective(trial):
         global best_model
         global min_score
-        global X_test_normalized
+        global X_test_normalized_best
 
         print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
@@ -408,6 +408,10 @@ def main(args):
                 X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
                 X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_aug_train[:, 150 * i:150 * i + 150])
                 X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
+            else:
+                X_train_normalized=X_train
+                X_aug_train_normalized=X_aug_train
+                X_test_normalized=X_test
 
             if power_type=='yeo_johnson': power = PowerTransformer(method='yeo-johnson')
             elif power_type=='box_cox' and scaler_type=='minmax': power = PowerTransformer(method='box-cox')
@@ -501,13 +505,14 @@ def main(args):
         if mean_score < min_score:
             min_score=mean_score
             best_model=random_forests
+            X_test_normalized_best=X_test_normalized
             predictions_and_submission_2(None, best_model, X_test_normalized, cons, args,min_score)
 
         return mean_score
 
     study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
-    predictions_and_submission_2(study, best_model, X_test_normalized, cons, args,min_score)
+    predictions_and_submission_2(study, best_model, X_test_normalized_best, cons, args,min_score)
 
     # save study
     #final_model = study.best_params["regressor"]

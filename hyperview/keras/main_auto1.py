@@ -30,6 +30,8 @@ from tensorflow.keras.optimizers import Nadam, Adam,SGD
 from tensorflow.keras import layers
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras import regularizers
+from sklearn.preprocessing import PowerTransformer
+
 
 
 class CustomCosineLoss(tf.keras.losses.Loss):
@@ -607,25 +609,11 @@ def main(args):
     print(f"test data size: {len(X_test)}\n")
 
     print('Preprocess training data...')
-    X_processed = preprocess(X_train, M_train)
-    X_aug_processed = preprocess(X_aug_train, M_aug_train)
+    X_train = preprocess(X_train, M_train)
+    X_aug_train = preprocess(X_aug_train, M_aug_train)
 
     print('preprocess test data ...')
     X_test = preprocess(X_test, M_test)
-
-    #X_processed_normalized = np.zeros(X_processed.shape)
-    #X_aug_processed_normalized=np.zeros(X_aug_processed.shape)
-    #X_test_normalized = np.zeros(X_test.shape)
-
-    #min_max_scaler_list = []
-    #for i in range(int(X_processed.shape[-1])):
-        #min_max_scaler = preprocessing.RobustScaler()
-        #min_max_scaler.fit(np.concatenate((X_processed[:,:, i], X_test[:,:, i])))
-        #X_processed[:,:, i] = min_max_scaler.transform(X_processed[:,:, i])
-        #X_aug_processed[:,:, i] = min_max_scaler.transform(X_aug_processed[:,:, i])
-        #X_test[:,:, i] = min_max_scaler.transform(X_test[:,:, i])
-        #min_max_scaler_list.append(min_max_scaler)
-
 
     # selected set of labels
     y_train_col = y_train[:, args.col_ix]
@@ -637,9 +625,11 @@ def main(args):
     best_model = None
     global min_score
     min_score = 10
+    global X_test_normalized_best
     def objective(trial):
         global best_model
         global min_score
+        global X_test_normalized_best
 
         print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
@@ -651,18 +641,56 @@ def main(args):
         y_hat_rf = []
         scores = []
 
+        X_train_normalized = np.zeros(X_train.shape)
+        X_aug_train_normalized = np.zeros(X_aug_train.shape)
+        X_test_normalized = np.zeros(X_test.shape)
+
+        for i in range(int(X_train.shape[-1] / 150)):
+            if best_scaler_type == 'robust':
+                scaler = preprocessing.RobustScaler()
+            elif best_scaler_type == 'minmax':
+                scaler = preprocessing.MinMaxScaler((1, 2))
+            else:
+                scaler = None
+            if scaler is not None:
+                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
+                X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
+                X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(
+                    X_aug_train[:, 150 * i:150 * i + 150])
+                X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
+            else:
+                X_train_normalized = X_train
+                X_aug_train_normalized = X_aug_train
+                X_test_normalized = X_test
+
+            if best_power_type == 'yeo_johnson':
+                power = PowerTransformer(method='yeo-johnson')
+            elif best_power_type == 'box_cox' and best_scaler_type == 'minmax':
+                power = PowerTransformer(method='box-cox')
+            else:
+                power = None
+            if power is not None:
+                power.fit(np.concatenate(
+                    (X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
+                X_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
+                    X_train_normalized[:, 150 * i:150 * i + 150])
+                X_aug_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
+                    X_aug_train_normalized[:, 150 * i:150 * i + 150])
+                X_test_normalized[:, 150 * i:150 * i + 150] = power.transform(
+                    X_test_normalized[:, 150 * i:150 * i + 150])
+
         print("START TRAINING ...")
         for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(y_train)))):
 
             print(f'fold {i}:')
 
-            X_t = X_processed[ix_train]
+            X_t = X_train_normalized[ix_train]
             y_t = y_train_col[ix_train]
             augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
             augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1], log=True)
 
             for idy in range(augment_constant):
-                X_ta_1 = X_aug_processed[ix_train+(idy*len(y_train))]
+                X_ta_1 = X_aug_train_normalized[ix_train+(idy*len(y_train))]
                 y_ta_1 = y_aug_train_col[ix_train+(idy*len(y_train))]
                 X_t=np.concatenate((X_t,X_ta_1[-augment_partition:]),axis=0)
                 y_t=np.concatenate((y_t,y_ta_1[-augment_partition:]),axis=0)
@@ -671,7 +699,7 @@ def main(args):
             if args.mix_aug:
                 X_t, y_t = mixing_augmentation(X_t, y_t)
 
-            X_v = X_processed[ix_valid]
+            X_v = X_train_normalized[ix_valid]
             y_v = y_train_col[ix_valid]
 
             # baseline
@@ -734,38 +762,86 @@ def main(args):
         if mean_score < min_score:
             min_score=mean_score
             best_model=random_forests
-            predictions_and_submission_2(None,None,auto_encoders, best_model, X_test, cons, args,min_score)
+            X_test_normalized_best = X_test_normalized
+            predictions_and_submission_2(None,None,auto_encoders, best_model, X_test_normalized, cons, args,min_score)
 
         return mean_score
 
     global auto_encoders
     auto_encoders = None
     global min_auto
+    global best_power_type
+    global best_scaler_type
     min_auto = 10
     def objective2(trial):
         auto_encoder_list = []
         global auto_encoders
         global min_auto
+        global best_power_type
+        global best_scaler_type
         scores = []
 
         print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
         kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
 
+        X_train_normalized = np.zeros(X_train.shape)
+        X_aug_train_normalized = np.zeros(X_aug_train.shape)
+        X_test_normalized = np.zeros(X_test.shape)
+
+        # min_max_scaler_list = []
+        # https://machinelearningmastery.com/power-transforms-with-scikit-learn/
+        scaler_type = trial.suggest_categorical("scaler", ["robust", "minmax", "None"])
+        power_type = trial.suggest_categorical("power", ["yeo_johnson", "box_cox", "None"])
+
+        for i in range(int(X_train.shape[-1] / 150)):
+            if scaler_type == 'robust':
+                scaler = preprocessing.RobustScaler()
+            elif scaler_type == 'minmax':
+                scaler = preprocessing.MinMaxScaler((1, 2))
+            else:
+                scaler = None
+            if scaler is not None:
+                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
+                X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
+                X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_aug_train[:, 150 * i:150 * i + 150])
+                X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
+            else:
+                X_train_normalized=X_train
+                X_aug_train_normalized=X_aug_train
+                X_test_normalized=X_test
+
+
+            if power_type == 'yeo_johnson':
+                power = PowerTransformer(method='yeo-johnson')
+            elif power_type == 'box_cox' and scaler_type == 'minmax':
+                power = PowerTransformer(method='box-cox')
+            else:
+                power = None
+            if power is not None:
+                power.fit(np.concatenate(
+                    (X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
+                X_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
+                    X_train_normalized[:, 150 * i:150 * i + 150])
+                X_aug_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
+                    X_aug_train_normalized[:, 150 * i:150 * i + 150])
+                X_test_normalized[:, 150 * i:150 * i + 150] = power.transform(
+                    X_test_normalized[:, 150 * i:150 * i + 150])
+
         #augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
         #augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0],
         #                                      args.augment_partition[1], log=True)
         # X_aug_processed_split = np.vsplit(X_aug_processed, 5)
 
-        X_processed_ext = np.concatenate((X_processed, X_test), axis=0)
+        X_processed_ext = np.concatenate((X_train_normalized, X_test_normalized), axis=0)
 
 
         for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(X_processed_ext)))):
             print(f'fold {i}:')
             X_t = X_processed_ext[ix_train]
 
-            t_indices=ix_train < len(X_processed)
-            X_aug_processed_split=np.vsplit(X_aug_processed, args.augment_constant)
+            t_indices=ix_train < len(X_train_normalized)
+            X_aug_processed_split=np.vsplit(X_aug_train_normalized, args.augment_constant)
             for X_aug in X_aug_processed_split:
                 idx=ix_train[t_indices]
                 X_t=np.concatenate((X_t,X_aug[idx]),axis=0)
@@ -798,6 +874,8 @@ def main(args):
         if mean_score < min_auto:
             min_auto = mean_score
             auto_encoders = auto_encoder_list
+            best_power_type=power_type
+            best_scaler_type=best_scaler_type
 
         return mean_score
 
@@ -806,7 +884,7 @@ def main(args):
 
     study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
-    predictions_and_submission_2(study,study_auto, auto_encoders,best_model, X_test, cons, args,min_score)
+    predictions_and_submission_2(study,study_auto, auto_encoders,best_model, X_test_normalized_best, cons, args,min_score)
 
     # save study
     #final_model = study.best_params["regressor"]
@@ -858,7 +936,7 @@ if __name__ == "__main__":
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=512)
-    parser.add_argument('--n-trials-auto', type=int, default=24)
+    parser.add_argument('--n-trials-auto', type=int, default=48)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 , 256])
