@@ -410,7 +410,7 @@ def main(args):
                 X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
 
             if power_type=='yeo_johnson': power = PowerTransformer(method='yeo-johnson')
-            elif power_type=='box_cox': power = PowerTransformer(method='box-cox')
+            elif power_type=='box_cox' and scaler_type=='minmax': power = PowerTransformer(method='box-cox')
             else: power=None
             if power is not None:
                 power.fit(np.concatenate((X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
