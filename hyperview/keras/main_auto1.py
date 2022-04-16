@@ -653,7 +653,7 @@ def main(args):
             else:
                 scaler = None
             if scaler is not None:
-                scaler.fit(np.concatenate((X_train[:, :, i], X_test[:, :, i])))
+                scaler.fit(np.concatenate((X_train[:, :, i], X_test[:, :, i],X_aug_train[:, :, i])))
                 X_train_normalized[:, :, i] = scaler.transform(X_train[:, :, i])
                 X_aug_train_normalized[:, :, i] = scaler.transform(X_aug_train[:, :, i])
                 X_test_normalized[:, :, i] = scaler.transform(X_test[:, :, i])
@@ -669,8 +669,7 @@ def main(args):
             else:
                 power = None
             if power is not None:
-                power.fit(np.concatenate(
-                    (X_train_normalized[:, :, i], X_test_normalized[:, :, i])))
+                power.fit(np.concatenate((X_train_normalized[:, :, i], X_test_normalized[:, :, i],X_aug_train_normalized[:, :, i])))
                 X_train_normalized[:, :, i] = power.transform(X_train_normalized[:, :, i])
                 X_aug_train_normalized[:, :, i] = power.transform(X_aug_train_normalized[:, :, i])
                 X_test_normalized[:, :, i] = power.transform(X_test_normalized[:, :, i])
@@ -798,7 +797,7 @@ def main(args):
             else:
                 scaler = None
             if scaler is not None:
-                scaler.fit(np.concatenate((X_train[:, :, i], X_test[:, :, i])))
+                scaler.fit(np.concatenate((X_train[:, :, i], X_test[:, :, i],X_aug_train[:, :, i])))
                 X_train_normalized[:, :, i] = scaler.transform(X_train[:, :, i])
                 X_aug_train_normalized[:, :, i] = scaler.transform(X_aug_train[:, :, i])
                 X_test_normalized[:, :, i] = scaler.transform(X_test[:, :, i])
@@ -815,7 +814,7 @@ def main(args):
             else:
                 power = None
             if power is not None:
-                power.fit(np.concatenate((X_train_normalized[:, :, i], X_test_normalized[:, :, i])))
+                power.fit(np.concatenate((X_train_normalized[:, :, i], X_test_normalized[:, :, i],X_aug_train_normalized[:, :, i])))
                 X_train_normalized[:, :, i] = power.transform(X_train_normalized[:, :, i])
                 X_aug_train_normalized[:, :, i] = power.transform(X_aug_train_normalized[:, :, i])
                 X_test_normalized[:, :, i] = power.transform(X_test_normalized[:, :, i])

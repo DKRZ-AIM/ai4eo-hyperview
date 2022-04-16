@@ -404,7 +404,7 @@ def main(args):
             elif scaler_type=='minmax': scaler = preprocessing.MinMaxScaler((1,2))
             else: scaler=None
             if scaler is not None:
-                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
+                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150],X_aug_train[:, 150 * i:150 * i + 150])))
                 X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
                 X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_aug_train[:, 150 * i:150 * i + 150])
                 X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
@@ -417,7 +417,7 @@ def main(args):
             elif power_type=='box_cox' and scaler_type=='minmax': power = PowerTransformer(method='box-cox')
             else: power=None
             if power is not None:
-                power.fit(np.concatenate((X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
+                power.fit(np.concatenate((X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150],X_aug_train_normalized[:, 150 * i:150 * i + 150])))
                 X_train_normalized[:, 150 * i:150 * i + 150] = power.transform(X_train_normalized[:, 150 * i:150 * i + 150])
                 X_aug_train_normalized[:, 150 * i:150 * i + 150] = power.transform(X_aug_train_normalized[:, 150 * i:150 * i + 150])
                 X_test_normalized[:, 150 * i:150 * i + 150] = power.transform(X_test_normalized[:, 150 * i:150 * i + 150])
