@@ -645,7 +645,7 @@ def main(args):
         X_aug_train_normalized = np.zeros(X_aug_train.shape)
         X_test_normalized = np.zeros(X_test.shape)
 
-        for i in range(int(X_train.shape[-1] / 150)):
+        for i in range(int(X_train.shape[-1])):
             if best_scaler_type == 'robust':
                 scaler = preprocessing.RobustScaler()
             elif best_scaler_type == 'minmax':
@@ -653,11 +653,10 @@ def main(args):
             else:
                 scaler = None
             if scaler is not None:
-                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
-                X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
-                X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(
-                    X_aug_train[:, 150 * i:150 * i + 150])
-                X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
+                scaler.fit(np.concatenate((X_train[:, :, i], X_test[:, :, i])))
+                X_train_normalized[:, :, i] = scaler.transform(X_train[:, :, i])
+                X_aug_train_normalized[:, :, i] = scaler.transform(X_aug_train[:, :, i])
+                X_test_normalized[:, :, i] = scaler.transform(X_test[:, :, i])
             else:
                 X_train_normalized = X_train
                 X_aug_train_normalized = X_aug_train
@@ -671,13 +670,10 @@ def main(args):
                 power = None
             if power is not None:
                 power.fit(np.concatenate(
-                    (X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
-                X_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
-                    X_train_normalized[:, 150 * i:150 * i + 150])
-                X_aug_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
-                    X_aug_train_normalized[:, 150 * i:150 * i + 150])
-                X_test_normalized[:, 150 * i:150 * i + 150] = power.transform(
-                    X_test_normalized[:, 150 * i:150 * i + 150])
+                    (X_train_normalized[:, :, i], X_test_normalized[:, :, i])))
+                X_train_normalized[:, :, i] = power.transform(X_train_normalized[:, :, i])
+                X_aug_train_normalized[:, :, i] = power.transform(X_aug_train_normalized[:, :, i])
+                X_test_normalized[:, :, i] = power.transform(X_test_normalized[:, :, i])
 
         print("START TRAINING ...")
         for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(y_train)))):
@@ -794,7 +790,7 @@ def main(args):
         scaler_type = trial.suggest_categorical("scaler", ["robust", "minmax", "None"])
         power_type = trial.suggest_categorical("power", ["yeo_johnson", "box_cox", "None"])
 
-        for i in range(int(X_train.shape[-1] / 150)):
+        for i in range(int(X_train.shape[-1])):
             if scaler_type == 'robust':
                 scaler = preprocessing.RobustScaler()
             elif scaler_type == 'minmax':
@@ -802,10 +798,10 @@ def main(args):
             else:
                 scaler = None
             if scaler is not None:
-                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
-                X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
-                X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_aug_train[:, 150 * i:150 * i + 150])
-                X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
+                scaler.fit(np.concatenate((X_train[:, :, i], X_test[:, :, i])))
+                X_train_normalized[:, :, i] = scaler.transform(X_train[:, :, i])
+                X_aug_train_normalized[:, :, i] = scaler.transform(X_aug_train[:, :, i])
+                X_test_normalized[:, :, i] = scaler.transform(X_test[:, :, i])
             else:
                 X_train_normalized=X_train
                 X_aug_train_normalized=X_aug_train
@@ -819,14 +815,10 @@ def main(args):
             else:
                 power = None
             if power is not None:
-                power.fit(np.concatenate(
-                    (X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
-                X_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
-                    X_train_normalized[:, 150 * i:150 * i + 150])
-                X_aug_train_normalized[:, 150 * i:150 * i + 150] = power.transform(
-                    X_aug_train_normalized[:, 150 * i:150 * i + 150])
-                X_test_normalized[:, 150 * i:150 * i + 150] = power.transform(
-                    X_test_normalized[:, 150 * i:150 * i + 150])
+                power.fit(np.concatenate((X_train_normalized[:, :, i], X_test_normalized[:, :, i])))
+                X_train_normalized[:, :, i] = power.transform(X_train_normalized[:, :, i])
+                X_aug_train_normalized[:, :, i] = power.transform(X_aug_train_normalized[:, :, i])
+                X_test_normalized[:, :, i] = power.transform(X_test_normalized[:, :, i])
 
         #augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
         #augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0],
