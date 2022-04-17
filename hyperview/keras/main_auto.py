@@ -186,12 +186,12 @@ def preprocess(data_list, mask_list):
         cAw2 = np.concatenate((cA0[12:92], cAx[15:55], cAy[15:35], cAz[15:25]), -1)
         cDw2 = np.concatenate((cD0[12:92], cDx[15:55], cDy[15:35], cDz[15:25]), -1)
 
-        # cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
-        # cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
-        # cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
-        # cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
-        # cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
-        # cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
+        cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
+        cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
+        cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
+        cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
+        cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
+        cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
 
         dXdl = np.gradient(arr, axis=0)
         # dXdl = dXdl / np.max(dXdl)
@@ -203,10 +203,10 @@ def preprocess(data_list, mask_list):
         # d2Xdl2 = d2Xdl2 / np.max(d2Xdl2)
         # d4Xdl4 = np.gradient(d3Xdl3, axis=0)
 
-        fft = np.fft.fft(arr)
-        real = np.real(fft)
+        #fft = np.fft.fft(arr)
+        #real = np.real(fft)
         # real = real / np.max(real)
-        imag = np.imag(fft)
+        #imag = np.imag(fft)
         # imag = imag / np.max(imag)
         ffts = np.fft.fft(s0)
         reals = np.real(ffts)
@@ -216,7 +216,8 @@ def preprocess(data_list, mask_list):
 
         cos = dct(arr)
 
-        out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, real, imag, reals, imags, cDw2, cAw2,cos], -1)
+        #out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, real, imag, reals, imags, cDw1, cAw1, cDw2, cAw2,cos], -1)
+        out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, reals, imags, cDw1, cAw1, cDw2, cAw2,cos], -1)
         processed_data.append(out)
 
     return np.array(processed_data)
@@ -280,7 +281,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     feats = {}
     importances = optimised_model.feature_importances_
     feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
-                     'reals','imags', 'cDw2', 'cAw2', 'cos']
+                     'reals','imags', 'cDw1', 'cAw1', 'cDw2', 'cAw2', 'cos']
     for feature, importance in zip(feature_names, importances):
         feats[feature] = importance
     feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
@@ -308,11 +309,13 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     return predictions
 
 
-def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score):
+def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score,label_transformer):
 
     predictions = []
     for rf in best_model:
         pp = rf.predict(X_test)
+        if label_transformer is not None:
+            pp=label_transformer.inverse_transform(pp)
         predictions.append(pp)
 
     predictions = np.asarray(predictions)
@@ -323,8 +326,9 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score
 
     feats = {}
     importances = best_model[-1].feature_importances_
-    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
-                     'reals','imags', 'cDw2', 'cAw2', 'cos']
+    #feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag','reals', 'imags', 'cDw1', 'cAw1', 'cDw2', 'cAw2', 'cos']
+    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4','reals', 'imags', 'cDw1', 'cAw1', 'cDw2', 'cAw2', 'cos']
+
     for feature, importance in zip(feature_names, importances):
         feats[feature] = importance
     feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
@@ -383,10 +387,12 @@ def main(args):
     global min_score
     min_score = 10
     global X_test_normalized_best
+    global label_transformer_best
     def objective(trial):
         global best_model
         global min_score
         global X_test_normalized_best
+        global label_transformer_best
 
         print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
@@ -398,15 +404,32 @@ def main(args):
 
         # min_max_scaler_list = []
         # https://machinelearningmastery.com/power-transforms-with-scikit-learn/
+        # reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
+        reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+
+        if reg_name == "RandomForest":
+            n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
+            max_depth = trial.suggest_categorical('max_depth', args.max_depth)
+            min_samples_leaf = trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
+
+        else:
+            n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
+            max_depth = trial.suggest_categorical('max_depth', args.max_depth)
+
+
+
         scaler_type = trial.suggest_categorical("scaler", ["robust", "minmax","None"])
         power_type = trial.suggest_categorical("power", ["yeo_johnson", "quantile","None"])
+        label_trans_type = trial.suggest_categorical("label_trans", ["box_cox", "quantile", "None"])
+        augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
+        augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1],log=True)
 
         for i in range(int(X_train.shape[-1] / 150)):
             if scaler_type=='robust': scaler = preprocessing.RobustScaler()
-            elif scaler_type=='minmax': scaler = preprocessing.MinMaxScaler((1,2))
+            elif scaler_type=='minmax': scaler = preprocessing.MinMaxScaler((0,1))
             else: scaler=None
             if scaler is not None:
-                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150],X_aug_train[:, 150 * i:150 * i + 150])))
+                scaler.fit(np.concatenate((X_train[:, 150 * i:150 * i + 150], X_test[:, 150 * i:150 * i + 150])))
                 X_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_train[:, 150 * i:150 * i + 150])
                 X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_aug_train[:, 150 * i:150 * i + 150])
                 X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
@@ -420,12 +443,20 @@ def main(args):
                 power = QuantileTransformer(n_quantiles=900, output_distribution="normal")
             else: power=None
             if power is not None:
-                power.fit(np.concatenate((X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150],X_aug_train_normalized[:, 150 * i:150 * i + 150])))
+                power.fit(np.concatenate((X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150])))
                 X_train_normalized[:, 150 * i:150 * i + 150] = power.transform(X_train_normalized[:, 150 * i:150 * i + 150])
                 X_aug_train_normalized[:, 150 * i:150 * i + 150] = power.transform(X_aug_train_normalized[:, 150 * i:150 * i + 150])
                 X_test_normalized[:, 150 * i:150 * i + 150] = power.transform(X_test_normalized[:, 150 * i:150 * i + 150])
 
-            # min_max_scaler_list.append(min_max_scaler)
+        if label_trans_type=='box_cox': label_transformer=PowerTransformer(method='box-cox')
+        elif label_trans_type=='quantile': label_transformer=QuantileTransformer(n_quantiles=900, output_distribution="normal")
+        else: label_transformer=None
+        if label_transformer is not None:
+            label_temp_list = [y_train_col]
+            for idy in range(augment_constant):
+                label_temp_list.append(y_aug_train_col[(idy + 1) * len(y_train) - augment_partition:(idy + 1) * len(y_train)])
+
+            label_transformer.fit(np.concatenate(label_temp_list,axis=0))
 
         random_forests = []
         baseline_regressors = []
@@ -440,8 +471,7 @@ def main(args):
 
             X_t = X_train_normalized[ix_train]
             y_t = y_train_col[ix_train]
-            augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
-            augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1], log=True)
+
 
             for idy in range(augment_constant):
                 X_ta_1 = X_aug_train_normalized[ix_train+(idy*len(y_train))]
@@ -462,35 +492,31 @@ def main(args):
             baseline_regressors.append(baseline)
 
             #reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
-            reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+
 
             print(f"Training on {reg_name}")
             if reg_name == "RandomForest":
-                n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
-                max_depth = trial.suggest_categorical('max_depth', args.max_depth)
-                min_samples_leaf = trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
-
                 # random forest
                 model = RandomForestRegressor(n_estimators=n_estimators,
                                               max_depth=max_depth,
                                               min_samples_leaf=min_samples_leaf,
                                               n_jobs=-1)
             else:
-                n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
-                max_depth = trial. suggest_categorical('max_depth', args.max_depth)
-
                 # xgboost
                 model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
                                                               max_depth=max_depth,
                                                               n_estimators=n_estimators,
                                                               verbosity=1))
-
+            if label_transformer is not None:
+                y_t=label_transformer.transform(y_t)
             model.fit(X_t, y_t)
             random_forests.append(model)
-            print(f'{reg_name} score: {model.score(X_v, y_v)}')
+            #print(f'{reg_name} score: {model.score(X_v, y_v)}')
 
             # predictions
             y_hat = model.predict(X_v)
+            if label_transformer is not None:
+                y_hat = label_transformer.inverse_transform(y_hat)
             y_b = baseline.predict(X_v)
 
             y_hat_bl.append(y_b)
@@ -508,14 +534,15 @@ def main(args):
         if mean_score < min_score:
             min_score=mean_score
             best_model=random_forests
+            label_transformer_best=label_transformer
             X_test_normalized_best=X_test_normalized
-            predictions_and_submission_2(None, best_model, X_test_normalized, cons, args,min_score)
+            predictions_and_submission_2(None, best_model, X_test_normalized, cons, args,min_score,label_transformer)
 
         return mean_score
 
     study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
-    predictions_and_submission_2(study, best_model, X_test_normalized_best, cons, args,min_score)
+    predictions_and_submission_2(study, best_model, X_test_normalized_best, cons, args,min_score,label_transformer_best)
 
     # save study
     #final_model = study.best_params["regressor"]
@@ -566,7 +593,7 @@ if __name__ == "__main__":
     parser.add_argument('--n-estimators', type=int, nargs='+', default=[64, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
-    parser.add_argument('--n-trials', type=int, default=512)
+    parser.add_argument('--n-trials', type=int, default=1)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
 
