@@ -23,6 +23,8 @@ from sklearn import preprocessing
 from scipy.fftpack import dct
 from sklearn.preprocessing import PowerTransformer
 import sys
+from sklearn.preprocessing import QuantileTransformer
+
 
 
 class BaselineRegressor():
@@ -397,7 +399,7 @@ def main(args):
         # min_max_scaler_list = []
         # https://machinelearningmastery.com/power-transforms-with-scikit-learn/
         scaler_type = trial.suggest_categorical("scaler", ["robust", "minmax","None"])
-        power_type = trial.suggest_categorical("power", ["yeo_johnson", "box_cox","None"])
+        power_type = trial.suggest_categorical("power", ["yeo_johnson", "quantile","None"])
 
         for i in range(int(X_train.shape[-1] / 150)):
             if scaler_type=='robust': scaler = preprocessing.RobustScaler()
@@ -414,7 +416,8 @@ def main(args):
                 X_test_normalized=X_test
 
             if power_type=='yeo_johnson': power = PowerTransformer(method='yeo-johnson')
-            elif power_type=='box_cox' and scaler_type=='minmax': power = PowerTransformer(method='box-cox')
+            elif power_type == 'quantile':
+                power = QuantileTransformer(n_quantiles=900, output_distribution="normal")
             else: power=None
             if power is not None:
                 power.fit(np.concatenate((X_train_normalized[:, 150 * i:150 * i + 150], X_test_normalized[:, 150 * i:150 * i + 150],X_aug_train_normalized[:, 150 * i:150 * i + 150])))

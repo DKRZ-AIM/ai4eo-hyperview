@@ -31,6 +31,7 @@ from tensorflow.keras import layers
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
 from tensorflow.keras import regularizers
 from sklearn.preprocessing import PowerTransformer
+from sklearn.preprocessing import QuantileTransformer
 
 
 
@@ -664,8 +665,8 @@ def main(args):
 
             if best_power_type == 'yeo_johnson':
                 power = PowerTransformer(method='yeo-johnson')
-            elif best_power_type == 'box_cox' and best_scaler_type == 'minmax':
-                power = PowerTransformer(method='box-cox')
+            elif best_power_type == 'quantile':
+                power = QuantileTransformer(n_quantiles=900, output_distribution="normal")
             else:
                 power = None
             if power is not None:
@@ -787,7 +788,7 @@ def main(args):
         # min_max_scaler_list = []
         # https://machinelearningmastery.com/power-transforms-with-scikit-learn/
         scaler_type = trial.suggest_categorical("scaler", ["robust", "minmax", "None"])
-        power_type = trial.suggest_categorical("power", ["yeo_johnson", "box_cox", "None"])
+        power_type = trial.suggest_categorical("power", ["yeo_johnson", "quantile", "None"])
 
         for i in range(int(X_train.shape[-1])):
             if scaler_type == 'robust':
@@ -809,8 +810,8 @@ def main(args):
 
             if power_type == 'yeo_johnson':
                 power = PowerTransformer(method='yeo-johnson')
-            elif power_type == 'box_cox' and scaler_type == 'minmax':
-                power = PowerTransformer(method='box-cox')
+            elif power_type == 'quantile':
+                power = QuantileTransformer(n_quantiles=900, output_distribution="normal")
             else:
                 power = None
             if power is not None:
