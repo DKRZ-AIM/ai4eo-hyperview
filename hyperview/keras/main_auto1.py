@@ -650,7 +650,7 @@ def main(args):
             if best_scaler_type == 'robust':
                 scaler = preprocessing.RobustScaler()
             elif best_scaler_type == 'minmax':
-                scaler = preprocessing.MinMaxScaler((1, 2))
+                scaler = preprocessing.MinMaxScaler((0, 1))
             else:
                 scaler = None
             if scaler is not None:
@@ -794,7 +794,7 @@ def main(args):
             if scaler_type == 'robust':
                 scaler = preprocessing.RobustScaler()
             elif scaler_type == 'minmax':
-                scaler = preprocessing.MinMaxScaler((1, 2))
+                scaler = preprocessing.MinMaxScaler((0, 1))
             else:
                 scaler = None
             if scaler is not None:
@@ -930,13 +930,13 @@ if __name__ == "__main__":
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=512)
-    parser.add_argument('--n-trials-auto', type=int, default=48)
+    parser.add_argument('--n-trials-auto', type=int, default=12)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
-    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128 , 256])
-    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh', 'relu'])
-    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001,0.0001])
-    parser.add_argument('--l1', type=float, nargs='+', default=[0.0001, 0.00001, 0.0])
+    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
+    parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh'])
+    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001])
+    parser.add_argument('--l1', type=float, nargs='+', default=[0.0001])
     args = parser.parse_args()
 
     # output = os.path.join(args.submission_dir, f"out_{date_time}")
