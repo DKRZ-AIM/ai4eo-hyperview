@@ -703,8 +703,8 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            #reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
-            reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+            reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
+            #reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
 
             print(f"Training on {reg_name}")
             if reg_name == "RandomForest":
@@ -931,7 +931,7 @@ if __name__ == "__main__":
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=512)
     parser.add_argument('--n-trials-auto', type=int, default=12)
-    parser.add_argument('--augment-constant', type=int, default=5)
+    parser.add_argument('--augment-constant', type=int, default=7)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh'])
