@@ -142,27 +142,29 @@ class Autoencoder2(keras.Model):
         #layers.Conv2D(64, 3, activation=layer_activation, padding='same'),
         layers.Dropout(0.25),
         layers.BatchNormalization(),
-        layers.MaxPooling1D( 5, padding='same'),
-        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
-        layers.Dropout(0.25),
-        layers.BatchNormalization(),
-        layers.Conv1D(64, 3, activation=layer_activation, padding='same'),
-        layers.Dropout(0.25),
-        layers.BatchNormalization(),
+        #layers.MaxPooling1D( 5, padding='same'),
+        #layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        #layers.Dropout(0.25),
+        #layers.BatchNormalization(),
+        #layers.Conv1D(64, 3, activation=layer_activation, padding='same'),
+        #layers.Dropout(0.25),
+        #layers.BatchNormalization(),
         layers.Flatten(),
-        layers.Dense(320, activation=layer_activation),
+        layers.Dense(1600, activation=layer_activation),
         layers.Dropout(0.25),
-        layers.Dense(320, activation=layer_activation),
+        layers.Dense(1024, activation=layer_activation),
         layers.Dropout(0.25),
         layers.Dense(latent_dim, activation=layer_activation, kernel_regularizer=regularizers.L1(l1_reg))
     ])
     self.decoder = tf.keras.Sequential([
-        layers.Dense(320, activation=layer_activation),
-        layers.Reshape(( 5, 64)),
-        layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        layers.Dense(1024, activation=layer_activation),
         layers.Dropout(0.25),
-        layers.BatchNormalization(),
-        layers.UpSampling1D(5),
+        layers.Dense(1600, activation=layer_activation),
+        layers.Reshape(( 25, 64)),
+        #layers.Conv1D(32, 3, activation=layer_activation, padding='same'),
+        #layers.Dropout(0.25),
+        #layers.BatchNormalization(),
+        #layers.UpSampling1D(5),
         ASPP(64, activation=layer_activation),
         #layers.Conv2D(64, (1, 3), activation=layer_activation, padding='same'),
         layers.Dropout(0.25),
@@ -391,12 +393,12 @@ def preprocess(data_list, mask_list):
         cAw2 = np.concatenate((cA0[12:92], cAx[15:55], cAy[15:35], cAz[15:25]), -1)
         cDw2 = np.concatenate((cD0[12:92], cDx[15:55], cDy[15:35], cDz[15:25]), -1)
 
-        # cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
-        # cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
-        # cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
-        # cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
-        # cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
-        # cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
+        cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
+        cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
+        cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
+        cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
+        cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
+        cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
 
         dXdl = np.gradient(arr, axis=0)
         # dXdl = dXdl / np.max(dXdl)
@@ -437,20 +439,22 @@ def preprocess(data_list, mask_list):
                               np.expand_dims(imags,-1),
                               np.expand_dims(cDw2,-1),
                               np.expand_dims(cAw2,-1),
+                              np.expand_dims(cDw1, -1),
+                              np.expand_dims(cAw1, -1),
                               np.expand_dims(cos,-1)], -1)
 
-        data = data.flatten('F')
-        data = data[~data.mask]
-        idx = np.random.randint(int(len(data) / 150), size=15)
-        out2 = np.zeros((150, 15))
-        for i, id in enumerate(idx):
-            px = data[id * 150: id * 150 + 150]
-            out2[:, i] = px
+        #data = data.flatten('F')
+        #data = data[~data.mask]
+        #idx = np.random.randint(int(len(data) / 150), size=15)
+        #out2 = np.zeros((150, 15))
+        #for i, id in enumerate(idx):
+        #    px = data[id * 150: id * 150 + 150]
+        #    out2[:, i] = px
 
 
-        out=np.concatenate([out1,out2],-1)
+        #out=np.concatenate([out1,out2],-1)
 
-        processed_data.append(out)
+        processed_data.append(out1)
 
     return np.array(processed_data)
 
@@ -646,6 +650,21 @@ def main(args):
         X_aug_train_normalized = np.zeros(X_aug_train.shape)
         X_test_normalized = np.zeros(X_test.shape)
 
+        # reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
+        reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+        if reg_name == "RandomForest":
+            n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
+            max_depth = trial.suggest_categorical('max_depth', args.max_depth)
+            min_samples_leaf = trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
+
+        else:
+            n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
+            max_depth = trial.suggest_categorical('max_depth', args.max_depth)
+
+
+        augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
+        augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1],log=True)
+
         for i in range(int(X_train.shape[-1])):
             if best_scaler_type == 'robust':
                 scaler = preprocessing.RobustScaler()
@@ -682,8 +701,6 @@ def main(args):
 
             X_t = X_train_normalized[ix_train]
             y_t = y_train_col[ix_train]
-            augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
-            augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1], log=True)
 
             for idy in range(augment_constant):
                 X_ta_1 = X_aug_train_normalized[ix_train+(idy*len(y_train))]
@@ -703,14 +720,10 @@ def main(args):
             baseline.fit(X_t, y_t)
             baseline_regressors.append(baseline)
 
-            reg_name = trial.suggest_categorical("regressor", ["RandomForest", "XGB"])
-            #reg_name = trial.suggest_categorical("regressor", ["RandomForest"])
+
 
             print(f"Training on {reg_name}")
             if reg_name == "RandomForest":
-                n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
-                max_depth = trial.suggest_categorical('max_depth', args.max_depth)
-                min_samples_leaf = trial.suggest_categorical('min_samples_leaf', args.min_samples_leaf)
 
                 # random forest
                 model = RandomForestRegressor(n_estimators=n_estimators,
@@ -718,8 +731,6 @@ def main(args):
                                               min_samples_leaf=min_samples_leaf,
                                               n_jobs=-1)
             else:
-                n_estimators = trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
-                max_depth = trial. suggest_categorical('max_depth', args.max_depth)
 
                 # xgboost
                 model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
@@ -790,6 +801,11 @@ def main(args):
         scaler_type = trial.suggest_categorical("scaler", ["robust", "minmax", "None"])
         power_type = trial.suggest_categorical("power", ["yeo_johnson", "quantile", "None"])
 
+        latent_dimension = trial.suggest_categorical('latent_dimension', args.latent_dimension)
+        learning_rate = trial.suggest_categorical('learning_rate', args.learning_rate)
+        layer_activation = trial.suggest_categorical('layer_activation', args.layer_activation)
+        l1 = trial.suggest_categorical('l1', args.l1)
+
         for i in range(int(X_train.shape[-1])):
             if scaler_type == 'robust':
                 scaler = preprocessing.RobustScaler()
@@ -838,10 +854,7 @@ def main(args):
                 idx=ix_train[t_indices]
                 X_t=np.concatenate((X_t,X_aug[idx]),axis=0)
 
-            latent_dimension = trial.suggest_categorical('latent_dimension', args.latent_dimension)
-            learning_rate = trial.suggest_categorical('learning_rate', args.learning_rate)
-            layer_activation = trial.suggest_categorical('layer_activation', args.layer_activation)
-            l1 = trial.suggest_categorical('l1', args.l1)
+
 
             X_v = X_processed_ext[ix_valid]
             autoencoder = Autoencoder2(latent_dimension, X_v.shape[-1],layer_activation,l1)
@@ -931,7 +944,7 @@ if __name__ == "__main__":
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=512)
     parser.add_argument('--n-trials-auto', type=int, default=12)
-    parser.add_argument('--augment-constant', type=int, default=7)
+    parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh'])
