@@ -42,7 +42,20 @@ class CustomCosineLoss(tf.keras.losses.Loss):
         self.loss= tf.keras.losses.CosineSimilarity()
 
     def call(self, y_true, y_pred):
-        sh=y_true.shape
+        #sh=y_true.shape
+        y_true = tf.keras.layers.Flatten()(y_true)
+        y_pred = tf.keras.layers.Flatten()(y_pred)
+        lo=self.loss(y_true,y_pred)
+        return lo
+
+class CustomMSELoss(tf.keras.losses.Loss):
+
+    def __init__(self,):
+        super().__init__()
+        self.loss= tf.keras.losses.MeanSquaredError()
+
+    def call(self, y_true, y_pred):
+        #sh=y_true.shape
         y_true = tf.keras.layers.Flatten()(y_true)
         y_pred = tf.keras.layers.Flatten()(y_pred)
         lo=self.loss(y_true,y_pred)
@@ -860,7 +873,7 @@ def main(args):
 
             X_v = X_processed_ext[ix_valid]
             autoencoder = Autoencoder(latent_dimension, X_v.shape[-1]*150,layer_activation,l1)
-            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss=CustomCosineLoss())
+            autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss=CustomMSELoss())
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
                       epochs=256,
@@ -945,12 +958,12 @@ if __name__ == "__main__":
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=512)
-    parser.add_argument('--n-trials-auto', type=int, default=12)
+    parser.add_argument('--n-trials-auto', type=int, default=32)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh'])
-    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001])
+    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001,0.0001])
     parser.add_argument('--l1', type=float, nargs='+', default=[0.0001,0])
     args = parser.parse_args()
 
