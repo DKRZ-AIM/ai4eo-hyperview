@@ -186,12 +186,12 @@ def preprocess(data_list, mask_list):
         cAw2 = np.concatenate((cA0[12:92], cAx[15:55], cAy[15:35], cAz[15:25]), -1)
         cDw2 = np.concatenate((cD0[12:92], cDx[15:55], cDy[15:35], cDz[15:25]), -1)
 
-        cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
-        cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
-        cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
-        cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
-        cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
-        cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
+        #cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
+        #cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
+        #cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
+        #cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
+        #cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
+        #cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
 
         dXdl = np.gradient(arr, axis=0)
         # dXdl = dXdl / np.max(dXdl)
@@ -214,10 +214,10 @@ def preprocess(data_list, mask_list):
         imags = np.imag(ffts)
         # imag = imag / np.max(imag)
 
-        cos = dct(arr)
+        #cos = dct(arr)
 
         #out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, real, imag, reals, imags, cDw1, cAw1, cDw2, cAw2,cos], -1)
-        out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, reals, imags, cDw1, cAw1, cDw2, cAw2,cos], -1)
+        out = np.concatenate([arr, dXdl, d2Xdl2, d3Xdl3, dXds1, s0, s1, s2, s3, s4, reals, imags, cDw2, cAw2], -1)
         processed_data.append(out)
 
     return np.array(processed_data)
@@ -327,7 +327,7 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args,min_score
     feats = {}
     importances = best_model[-1].feature_importances_
     #feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag','reals', 'imags', 'cDw1', 'cAw1', 'cDw2', 'cAw2', 'cos']
-    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4','reals', 'imags', 'cDw1', 'cAw1', 'cDw2', 'cAw2', 'cos']
+    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 's_1', 's_2', 's_3', 's_4','reals', 'imags', 'cDw2', 'cAw2']
 
     for feature, importance in zip(feature_names, importances):
         feats[feature] = importance
@@ -590,7 +590,7 @@ if __name__ == "__main__":
     parser.add_argument('--folds', type=int, default=5)
     parser.add_argument('--mix-aug', action='store_true', default=False)
     # model hyperparams
-    parser.add_argument('--n-estimators', type=int, nargs='+', default=[64, 1024])
+    parser.add_argument('--n-estimators', type=int, nargs='+', default=[128, 1024])
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=256)

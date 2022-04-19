@@ -203,6 +203,7 @@ class Autoencoder(keras.Model):
     self.latent_dim = latent_dim
     self.output_dim=output_dim
     self.encoder = tf.keras.Sequential([
+      layers.Flatten(),
       layers.Dense(output_dim, activation=layer_activation),
       layers.Dropout(0.25),
       layers.Dense(output_dim, activation=layer_activation),
@@ -393,12 +394,12 @@ def preprocess(data_list, mask_list):
         cAw2 = np.concatenate((cA0[12:92], cAx[15:55], cAy[15:35], cAz[15:25]), -1)
         cDw2 = np.concatenate((cD0[12:92], cDx[15:55], cDy[15:35], cDz[15:25]), -1)
 
-        cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
-        cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
-        cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
-        cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
-        cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
-        cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
+        #cA0, cD0 = pywt.dwt(arr, wavelet=w1,mode='constant')
+        #cAx, cDx = pywt.dwt(cA0[1:-1], wavelet=w1,mode='constant')
+        #cAy, cDy = pywt.dwt(cAx[1:-1], wavelet=w1,mode='constant')
+        #cAz, cDz = pywt.dwt(cAy[1:-1], wavelet=w1,mode='constant')
+        #cAw1=np.concatenate((cA0,cAx,cAy, cAz),-1)
+        #cDw1=np.concatenate((cD0,cDx,cDy, cDz),-1)
 
         dXdl = np.gradient(arr, axis=0)
         # dXdl = dXdl / np.max(dXdl)
@@ -421,7 +422,7 @@ def preprocess(data_list, mask_list):
         imags = np.imag(ffts)
         # imag = imag / np.max(imag)
 
-        cos = dct(arr)
+        #cos = dct(arr)
 
         out1 = np.concatenate([np.expand_dims(arr,-1),
                               np.expand_dims(dXdl,-1),
@@ -433,15 +434,16 @@ def preprocess(data_list, mask_list):
                               np.expand_dims(s2,-1),
                               np.expand_dims(s3,-1),
                               np.expand_dims(s4,-1),
-                              np.expand_dims(real,-1),
-                              np.expand_dims(imag,-1),
+                              #np.expand_dims(real,-1),
+                              #np.expand_dims(imag,-1),
                               np.expand_dims(reals,-1),
                               np.expand_dims(imags,-1),
                               np.expand_dims(cDw2,-1),
                               np.expand_dims(cAw2,-1),
-                              np.expand_dims(cDw1, -1),
-                              np.expand_dims(cAw1, -1),
-                              np.expand_dims(cos,-1)], -1)
+                              #np.expand_dims(cDw1, -1),
+                              #np.expand_dims(cAw1, -1),
+                              #np.expand_dims(cos,-1)
+                              ], -1)
 
         #data = data.flatten('F')
         #data = data[~data.mask]
@@ -857,7 +859,7 @@ def main(args):
 
 
             X_v = X_processed_ext[ix_valid]
-            autoencoder = Autoencoder2(latent_dimension, X_v.shape[-1],layer_activation,l1)
+            autoencoder = Autoencoder(latent_dimension, X_v.shape[-1]*150,layer_activation,l1)
             autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), loss=CustomCosineLoss())
             autoencoder.fit(X_t, X_t,
                       validation_split=0.2,
@@ -949,7 +951,7 @@ if __name__ == "__main__":
     parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh'])
     parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001])
-    parser.add_argument('--l1', type=float, nargs='+', default=[0.0001])
+    parser.add_argument('--l1', type=float, nargs='+', default=[0.0001,0])
     args = parser.parse_args()
 
     # output = os.path.join(args.submission_dir, f"out_{date_time}")
