@@ -693,9 +693,9 @@ def main(args):
                 X_aug_train_normalized[:, :, i] = scaler.transform(X_aug_train[:, :, i])
                 X_test_normalized[:, :, i] = scaler.transform(X_test[:, :, i])
             else:
-                X_train_normalized = X_train
-                X_aug_train_normalized = X_aug_train
-                X_test_normalized = X_test
+                X_train_normalized = np.array(X_train, copy=True)
+                X_aug_train_normalized = np.array(X_aug_train, copy=True)
+                X_test_normalized = np.array(X_test, copy=True)
 
             if best_power_type == 'yeo_johnson':
                 power = PowerTransformer(method='yeo-johnson')
@@ -834,9 +834,9 @@ def main(args):
                 X_aug_train_normalized[:, :, i] = scaler.transform(X_aug_train[:, :, i])
                 X_test_normalized[:, :, i] = scaler.transform(X_test[:, :, i])
             else:
-                X_train_normalized=X_train
-                X_aug_train_normalized=X_aug_train
-                X_test_normalized=X_test
+                X_train_normalized = np.array(X_train, copy=True)
+                X_aug_train_normalized = np.array(X_aug_train, copy=True)
+                X_test_normalized = np.array(X_test, copy=True)
 
 
             if power_type == 'yeo_johnson':
@@ -958,12 +958,12 @@ if __name__ == "__main__":
     parser.add_argument('--max-depth', type=int, nargs='+', default=[4, 8, 16, 32, 64, 128, 256, None])
     parser.add_argument('--min-samples-leaf', type=int, nargs='+', default=[1, 2, 4, 8, 16, 32, 64])
     parser.add_argument('--n-trials', type=int, default=512)
-    parser.add_argument('--n-trials-auto', type=int, default=32)
+    parser.add_argument('--n-trials-auto', type=int, default=48)
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
-    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128])
+    parser.add_argument('--latent-dimension', type=int, nargs='+', default=[128,256])
     parser.add_argument('--layer-activation', type=str, nargs='+', default=['swish', 'tanh'])
-    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001,0.0001])
+    parser.add_argument('--learning-rate', type=float, nargs='+', default=[0.001,0.0001,0.00001])
     parser.add_argument('--l1', type=float, nargs='+', default=[0.0001,0])
     args = parser.parse_args()
 

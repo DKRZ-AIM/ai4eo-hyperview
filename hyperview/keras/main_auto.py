@@ -434,9 +434,9 @@ def main(args):
                 X_aug_train_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_aug_train[:, 150 * i:150 * i + 150])
                 X_test_normalized[:, 150 * i:150 * i + 150] = scaler.transform(X_test[:, 150 * i:150 * i + 150])
             else:
-                X_train_normalized=X_train
-                X_aug_train_normalized=X_aug_train
-                X_test_normalized=X_test
+                X_train_normalized=np.array(X_train, copy=True)
+                X_aug_train_normalized=np.array(X_aug_train, copy=True)
+                X_test_normalized=np.array(X_test, copy=True)
 
             if power_type=='yeo_johnson': power = PowerTransformer(method='yeo-johnson')
             elif power_type == 'quantile':
