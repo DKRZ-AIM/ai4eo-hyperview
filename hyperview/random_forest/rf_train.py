@@ -53,7 +53,7 @@ class SpectralCurveFiltering():
         return self.merge_function(sample, axis=(1, 2))
 
 
-def load_data(directory: str, args):
+def load_data(directory: str, file_path, istrain, args):
     """Load each cube, reduce its dimensionality and append to array.
 
     Args:
@@ -63,7 +63,13 @@ def load_data(directory: str, args):
     """
     datalist = []
     masklist = []
-    
+    aug_datalist = []
+    aug_masklist = []
+    aug_labellist = []
+
+    if istrain:
+        labels = load_gt(file_path, args)
+
     all_files = np.array(
         sorted(
             glob(os.path.join(directory, "*.npz")),
@@ -79,11 +85,33 @@ def load_data(directory: str, args):
         with np.load(file_name) as npz:
             mask = npz['mask']
             data = npz['data']
-            
             datalist.append(data)
             masklist.append(mask)
 
-    return datalist, masklist
+    if istrain:
+        for i in range(args.augment_constant):
+            for idx, file_name in enumerate(all_files):
+                with np.load(file_name) as npz:
+                    mask = npz['mask']
+                    data = npz['data']
+                    ma = np.max(data, keepdims=True)
+                    sh = data.shape[1:]
+                    max_edge = np.max(sh)
+                    min_edge = np.min(sh)  # AUGMENT BY SHAPE
+                    edge = min_edge  # np.random.randint(16, min_edge)
+                    x = np.random.randint(sh[0] + 1 - edge)
+                    y = np.random.randint(sh[1] + 1 - edge)
+                    aug_data = data[:, x:(x + edge), y:(y + edge)] + np.random.uniform(-0.01, 0.01,
+                                                                                       (150, edge, edge)) * ma
+                    aug_mask = mask[:, x:(x + edge), y:(y + edge)] | np.random.randint(0, 1, (150, edge, edge))
+                    aug_datalist.append(aug_data)
+                    aug_masklist.append(aug_mask)
+                    aug_labellist.append(labels[idx, :] + labels[idx, :] * np.random.uniform(-0.01, 0.01, 4))
+
+    if istrain:
+        return datalist, masklist, labels, aug_datalist, aug_masklist, np.array(aug_labellist)
+    else:
+        return datalist, masklist
 
 def load_gt(file_path: str, args):
     """Load labels for train set from the ground truth file.
@@ -142,7 +170,7 @@ def preprocess(data_list, mask_list):
         imag = np.imag(fft)
 
         # final input matrix
-        out = np.concatenate([arr,dXdl, d2Xdl2, s[:,0], s[:,1], s[:,3], s[:,4], real, imag], -1)
+        out = np.concatenate([arr,dXdl, d2Xdl2, s[:,0], s[:,1], s[:,2], s[:,3], s[:,4], real, imag], -1)
 
         processed_data.append(out)
 
@@ -220,7 +248,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     print(f'\nScore of best model ({final_model}) on training set: {score}\n')
 
     # print feature importances
-    feature_names=['arr','dXdl', 'd2Xdl2', 's_0', 's_1', 's_3', 's_4', 'real', 'imag']
+    feature_names=['arr','dXdl', 'd2Xdl2', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag']
     if final_model == 'RandomForest':
         importances = optimised_model.feature_importances_
         print_feature_importances(feature_names, importances)
@@ -232,7 +260,7 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     
     # save the model
     if args.save_model:
-        output_file = os.path.join(args.model_dir, f"{final_model}_{date_time}_"\
+        output_file = os.path.join(args.model_dir, f"{final_model}_SIMPLE_{date_time}_"\
                 f"nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
                 f"minsl={study.best_params['min_samples_leaf']}.bin")
             
@@ -245,48 +273,105 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
         if final_model=="RandomForest":
-            submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_"\
+            submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_SIMPLE"\
                 f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
                 f"minsl={study.best_params['min_samples_leaf']}.csv"), index_label="sample_index")
         else:
-            submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_"\
+            submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_SIMPLE"\
                 f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
                 f"eta={eta}_gamma={gamma}_alpha={alpha}"\
                 f"minsl={study.best_params['min_child_weight']}.csv"), index_label="sample_index")
-        return predictions, submission
-    
-    return predictions
+
+
+def predictions_and_submission_2(study, best_model, X_test, cons, args, min_score):
+
+    predictions = []
+    for rf in best_model:
+        pp = rf.predict(X_test)
+        predictions.append(pp)
+    predictions = np.asarray(predictions)
+    predictions = np.mean(predictions, axis=0)
+    predictions = predictions * np.array(cons[:len(args.col_ix)])
+
+
+    final_model = best_model[0].__class__.__name__
+    # print feature importances for Random Forest
+    if final_model == "RandomForestRegressor":
+        feats = {}
+        importances = best_model[-1].feature_importances_
+        feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 
+                         's_1', 's_2', 's_3', 's_4', 'real', 'imag']
+        #feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0', 
+        #                 's_1', 's_2', 's_3', 's_4', 'real', 'imag',
+        #                 'reals','imags', 'cDw2', 'cAw2', 'cos']
+        for feature, importance in zip(feature_names, importances):
+            feats[feature] = importance
+        feats = sorted(feats.items(), key=lambda x: x[1], reverse=True)
+        for feat in feats:
+            print(f'{feat[0]}: {feat[1]}')
+
+    # only make submission file, if all 4 soil parameters are considered
+    if len(args.col_ix) == 4 and args.debug == False:
+        submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
+        print(submission.head())
+        if study is not None:
+            if final_model=="RandomForestRegressor":
+                submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_CV"\
+                        f"{date_time}_nest={study.best_params['n_estimators']}_"\
+                        f"maxd={study.best_params['max_depth']}_" \
+                        f"minsl={study.best_params['min_samples_leaf']}_"\
+                        #f"aug_con={study.best_params['augment_constant']}_"\
+                        #f"aug_par={study.best_params['augment_partition']}
+                        f".csv"),index_label="sample_index")
+            else:
+               print(f"CV submission for {final_model} not supported")
+        else:
+            submission.to_csv(os.path.join(args.submission_dir, "submission_best_{}.csv".format(min_score)),
+                    index_label="sample_index")
+
 
 def main(args):
-    
 
     train_data = os.path.join(args.in_data, "train_data", "train_data")
     test_data = os.path.join(args.in_data, "test_data")
-    
+    train_gt=os.path.join(args.in_data, "train_data", "train_gt.csv")
+
     # load the data
     print("start loading data ...")
     start_time = time.time()
-    X_train, M_train = load_data(train_data, args)
+    X_train, M_train, y_train, X_aug_train, M_aug_train, y_aug_train = load_data(train_data, train_gt, True, args)
     print(f"loading train data took {time.time() - start_time:.2f}s")
     print(f"train data size: {len(X_train)}")
     if args.debug==False:
         print(f"patch size examples: {X_train[0].shape}, {X_train[500].shape}, {X_train[1000].shape}")
     
     start_time = time.time()
-    y_train = load_gt(os.path.join(args.in_data, "train_data", "train_gt.csv"), args)
-    X_test, M_test = load_data(test_data, args)
+    X_test, M_test = load_data(test_data, None, False, args)
     print(f"loading test data took {time.time() - start_time:.2f}s")
     print(f"test data size: {len(X_test)}\n")
     
     print('Preprocess training data...')
     X_processed = preprocess(X_train, M_train)
+    X_aug_processed = preprocess(X_aug_train, M_aug_train)
+
+    print('preprocess test data ...')
+    X_test = preprocess(X_test, M_test)
+    y_aug_train_col=y_aug_train[:, args.col_ix]
+
     # selected set of labels
     y_train_col = y_train[:, args.col_ix]
 
     cons = np.array([325.0, 625.0, 400.0, 7.8])
-   
+  
+    global best_model
+    best_model = None
+    global min_score
+    min_score = np.inf
+
     def objective(trial):
-        
+        global best_model
+        global min_score
+
         print(f"\nTRIAL NUMBER: {trial.number}\n")
         # training
         kfold = KFold(n_splits=args.folds, shuffle=True, random_state=RANDOM_STATE)
@@ -372,12 +457,16 @@ def main(args):
         # final score
         mean_score = np.mean(np.array(scores))
         print(f'mean score: {mean_score}\n')
-        
+        if mean_score < min_score:
+            min_score = mean_score
+            best_model = random_forests
+            predictions_and_submission_2(None, best_model, X_test, cons, args, min_score)
+
         return mean_score
     
     study = optuna.create_study(sampler=TPESampler(), direction='minimize')
     study.optimize(objective, n_trials=args.n_trials)
-    
+
     # save study
     final_model = study.best_params["regressor"]
 
@@ -385,24 +474,18 @@ def main(args):
         output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
     if args.debug == False and final_model=="XGB":
         output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_eta={eta}_gamma={gamma}_alpha={alpha}_minsl={study.best_params['min_child_weight']}.pkl")
-    
-    with open(output_file, "wb") as f_out:
-        joblib.dump(study, f_out)
+
+    if args.debug == False:
+        with open(output_file, "wb") as f_out:
+            joblib.dump(study, f_out)
 
     # prepare submission
     print("MAKE PREDICTIONS AND PREPARE SUBMISSION")
-    print('preprocess test data ...')
-    X_test = preprocess(X_test, M_test)
-    
-    if args.col_ix == 4:
-        predictions, submission = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
-    else:
-        predictions = predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
+    # train best model on full training set
+    predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
+    # cross validation on validation set
+    predictions_and_submission_2(study, best_model, X_test, cons, args,min_score)
     print("PREDICTIONS AND SUBMISSION FINISHED")
-
-    # save predictions
-    if args.save_pred:
-        pass
 
 
 if __name__ == "__main__":
@@ -416,9 +499,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False)
-    parser.add_argument('--in-data', type=str, default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/')
-    parser.add_argument('--submission-dir', type=str, default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/submissions')
-    parser.add_argument('--model-dir', type=str, default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/models')
+    parser.add_argument('--in-data', type=str, 
+            default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/')
+    parser.add_argument('--submission-dir', type=str, 
+            default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/submissions')
+    parser.add_argument('--model-dir', type=str, 
+            default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/models')
     parser.add_argument('--save-pred', action='store_true', default=False)
     parser.add_argument('--save-model', action='store_true', default=False)
     parser.add_argument('--col-ix', type=int, nargs='+', default=[0, 1, 2, 3])
@@ -434,10 +520,13 @@ if __name__ == "__main__":
     parser.add_argument('--min-child_weight', type=int, nargs='+', default=[1, 10, 50])
     parser.add_argument('--regressors', type=str, nargs='+', default=["RandomForest", "XGB"])
     parser.add_argument('--n-trials', type=int, default=100)
-    # agmentation
+    # augmentation
     parser.add_argument('--mix-aug', action='store_true', default=False)
     parser.add_argument('--fract', type=float, nargs='+', default=[0.1])
     parser.add_argument('--mix-const', type=float, nargs='+', default=[0.05])
+    parser.add_argument('--augment-constant', type=int, default=5)
+    parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
+
 
     args = parser.parse_args()
 
