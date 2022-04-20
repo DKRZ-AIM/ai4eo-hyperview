@@ -507,7 +507,7 @@ class HyperviewNet(pl.LightningModule):
         super().__init__()
         self.backbone = backbone
         self.save_hyperparameters(self.backbone.args)
-        self.best_loss = np.inf # reported for nni
+        self.best_score = np.inf # reported for nni
         self.best_epoch = 0
 
     def forward(self, x):
@@ -541,11 +541,11 @@ class HyperviewNet(pl.LightningModule):
         return loss
 
     def validation_epoch_end(self, outputs):
-        val_loss = self.trainer.callback_metrics["valid_loss"]
-        if val_loss < self.best_loss:
-            self.best_loss = val_loss
+        val_score = self.trainer.callback_metrics["baseline_score"]
+        if val_score < self.best_score:
+            self.best_score = val_score
             self.best_epoch = self.trainer.current_epoch
-        self.log('best_loss', self.best_loss)
+        self.log('best_score', self.best_score)
         self.log('best_epoch', self.best_epoch)
 
     def test_step(self, batch, batch_idx):
@@ -619,7 +619,7 @@ class HyperviewMetricCallbacks(Callback):
     def on_validation_epoch_end(self, trainer, pl_module):
         '''After each epoch metrics on validation set'''
         if self.args.nni:
-            nni.report_intermediate_result(float(trainer.callback_metrics['valid_loss']))
+            nni.report_intermediate_result(float(trainer.callback_metrics['baseline_score']))
         metrics = trainer.callback_metrics # everything that was logged in self.log
         epoch = trainer.current_epoch
         print(f'Epoch {epoch} metrics:')
@@ -820,7 +820,7 @@ def main():
             if args.early_stopping:
                 callbacks.append(EarlyStopping(monitor='baseline_score', patience=args.patience, mode='min'))
 
-            checkpoint_callback = ModelCheckpoint(monitor='valid_loss', mode='min',
+            checkpoint_callback = ModelCheckpoint(monitor='baseline_score', mode='min',
                      dirpath=os.path.join(os.path.dirname(args.save_model_path), 'checkpoint', f'fold-{fold}'),
                      filename="hyperviewnet-{epoch}")
 
