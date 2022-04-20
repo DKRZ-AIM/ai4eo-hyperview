@@ -13,20 +13,22 @@ import matplotlib.pyplot as plt
 import keras.backend as K
 import pandas as pd
 import tensorflow_addons as tfa
+from sim_clr import SimCLR
 np.random.seed(1)
 tf.random.set_seed(2)
 
 
 parser = argparse.ArgumentParser(description='HyperView')
 
-parser.add_argument('-m', '--model-type', default=3, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
+parser.add_argument('-m', '--model-type', default=9, type=int, metavar='MT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('-c', '--channel-type', default=5, type=int, metavar='CT', help='0: X,  1: Y, 2: Z,')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='SE', help='start epoch (default: 0)')
-parser.add_argument('--num-epochs', default=3, type=int, metavar='NE', help='number of epochs to train (default: 120)')
+parser.add_argument('-t','--temperature', default=0.1, type=float, metavar='TE', help='learning temperature (default: 1)')
+parser.add_argument('--num-epochs', default=60, type=int, metavar='NE', help='number of epochs to train (default: 120)')
 parser.add_argument('--num-workers', default=4, type=int, metavar='NW', help='number of workers in training (default: 8)')
-parser.add_argument('-b','--batch-size', default=1, type=int, metavar='BS', help='number of batch size (default: 32)')
-parser.add_argument('-w','--width', default=128, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
-parser.add_argument('-l','--learning-rate', default=0.01, type=float, metavar='LR', help='learning rate (default: 0.01)')
+parser.add_argument('-b','--batch-size', default=16, type=int, metavar='BS', help='number of batch size (default: 32)')
+parser.add_argument('-w','--width', default=32, type=int, metavar='BS', help='number of widthxheight size (default: 32)')
+parser.add_argument('-l','--learning-rate', default=0.000125, type=float, metavar='LR', help='learning rate (default: 0.01)')
 parser.add_argument('--weights-dir', default='None', type=str, help='Weight Directory (default: modeldir)')
 
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true', help='evaluate the model (it requires the wights path to be given')
@@ -51,20 +53,74 @@ def main():
     dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
                             valid_size=0.20,
                             image_shape=image_shape,
-                            batch_size=args.batch_size)
+                            batch_size=int(args.batch_size/2),self_supervised=True)
 
-    experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}'.format(args.out_dir, args.model_type, args.channel_type,
+    experiment_log = '{}/m_{}_c_{}_b_{}_e_{}_lr_{}_p_{}_w_{}_t_{}'.format(args.out_dir, args.model_type, args.channel_type,
                                                                      args.batch_size, args.num_epochs,
-                                                                     args.learning_rate, args.pretrained, args.width)
+                                                                     args.learning_rate, args.pretrained, args.width,args.temperature)
 
 
-    model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, dataset.label_shape, pretrained=args.pretrained)
-    #train_model(model, dataset, experiment_log, warmup=True)
-    #model.load_weights('{}_model_best.h5'.format(experiment_log))
-    train_model(model, dataset, experiment_log, warmup=False)
-    model.load_weights('{}_model_best.h5'.format(experiment_log))
-    evaluate_model(model, dataset)
-    create_submission(model, dataset.eval_reader,experiment_log)
+    base_model = SpatioMultiChannellModel(args.model_type,args.channel_type, dataset.image_shape, 4, pretrained=args.pretrained)
+
+    sim_model=SimCLR(base_model,dataset.image_shape)
+    train_clr_model(sim_model, dataset, experiment_log, warmup=True)
+    sim_model.load_weights('{}_model_best_clr.h5'.format(experiment_log))
+    train_clr_model(sim_model, dataset, experiment_log, warmup=False)
+    sim_model.load_weights('{}_model_best_clr.h5'.format(experiment_log))
+    base_model.set_weights(sim_model.base_model.get_weights())
+
+    dataset = DataGenerator(args.train_dir, args.label_dir, args.eval_dir,
+                            valid_size=0.20,
+                            image_shape=image_shape,
+                            batch_size=args.batch_size, self_supervised=False)
+
+    train_model(base_model, dataset, experiment_log, warmup=False)
+    base_model.load_weights('{}_model_best.h5'.format(experiment_log))
+    evaluate_model(base_model, dataset)
+    create_submission(base_model, dataset, experiment_log)
+
+
+def train_clr_model(model, dataset, log_args,warmup):
+    #strategy = tf.distribute.MirroredStrategy(cross_device_ops=tf.distribute.ReductionToOneDevice())
+    #with strategy.scope():
+    print('\n\nTRAINING SESSION STARTED!\n\n')
+    if warmup:
+        learning_rate = args.learning_rate / 10
+        num_epochs = ceil(args.num_epochs / 10)
+    else:
+        for idx in range(len(model.submodules)):
+            if 'backbone_model' in model.submodules[idx].name:
+                model.submodules[idx].trainable = True
+                for idy in range(len(model.submodules[idx].layers)): model.submodules[idx].layers[idy].trainable = True
+        model.trainable=True
+        learning_rate = args.learning_rate
+        num_epochs = ceil(args.num_epochs/5)
+
+
+    loss_function = {'contrastive': NTXent(args.temperature), 'binary': tf.keras.losses.BinaryCrossentropy()}
+    loss_weights = {'contrastive': 0.1, 'binary': 0.9}
+    optimizer = Adam(learning_rate=learning_rate)
+
+    model.compile(optimizer=optimizer, loss=loss_function,loss_weights=loss_weights,metrics=['accuracy'], run_eagerly=False)
+
+    callbacks = [
+                ReduceLROnPlateau(verbose=1,factor=0.5, patience=5),
+                EarlyStopping(patience=5),
+                ModelCheckpoint(#update_weights=True,
+                    filepath='{}_model_best_clr.h5'.format(log_args),
+                    monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True),
+                ]
+
+    history = model.fit(dataset.train_reader,
+                                epochs=num_epochs,
+                                #steps_per_epoch=dataset.train_len,
+                                workers=args.num_workers,
+                                callbacks=callbacks,
+                                use_multiprocessing=True,
+                                shuffle=True,
+                                validation_data=dataset.valid_reader,
+                                #validation_steps=dataset.valid_len
+                                )
 
 
 def train_model(model, dataset, log_args, warmup=True):
@@ -91,32 +147,21 @@ def train_model(model, dataset, log_args, warmup=True):
             num_epochs = args.num_epochs
 
 
-        #maximal_learning_rate=learning_rate*100
-        #clr = tfa.optimizers.CyclicalLearningRate(initial_learning_rate=learning_rate,
-        #                                  maximal_learning_rate= maximal_learning_rate,
-        #                                  scale_fn=lambda x: 1 / (2. ** (x - 1)),
-        #                                  step_size=250
-        #                                  )
-
         optimizer = Adam(learning_rate=learning_rate)
-        #moving_avg_optimizer = tfa.optimizers.SWA(optimizer)
-
 
         mse_total = CustomMSE()
         mse0 = CustomMSE(idx=0)
         mse1 = CustomMSE(idx=1)
         mse2 = CustomMSE(idx=2)
         mse3 = CustomMSE(idx=3)
-        # mse = tf.keras.losses.MeanSquaredError(reduction = tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE)
-        # lossWeights = {"total": 1, "P": 0 / 1100, "K": 0 / 2500, "Mg": 0 / 2000, "pH": 0 / 3}
 
         losses = {"total": mse_total, "P": mse0,"K": mse1,"Mg": mse2,"pH": mse3}
         lossWeights = {"total": 1, "P": 0.0 , "K": 0.0 , "Mg": 0.0 , "pH": 0 }
         model.compile(optimizer=optimizer, loss=losses,loss_weights=lossWeights, run_eagerly=False)
 
         callbacks = [
-                ReduceLROnPlateau(verbose=1, patience=6),
-                EarlyStopping(patience=25),
+                ReduceLROnPlateau(verbose=1, factor=0.5, patience=5),
+                EarlyStopping(patience=10),
                 ModelCheckpoint(#update_weights=True,
                     filepath='{}_model_best.h5'.format(log_args),
                     monitor='val_loss', verbose=1, save_best_only=True, save_weights_only=True),
@@ -124,11 +169,14 @@ def train_model(model, dataset, log_args, warmup=True):
 
         history = model.fit(dataset.train_reader,
                                 epochs=num_epochs,
+                                #steps_per_epoch=dataset.train_len,
                                 workers=args.num_workers,
                                 callbacks=callbacks,
                                 use_multiprocessing=True,
                                 shuffle=True,
-                                validation_data=dataset.valid_reader)
+                                validation_data=dataset.valid_reader,
+                                #validation_steps=dataset.valid_len
+                            )
 
         loss_log = '{}_total_loss.jpg'.format(log_args)
         print_history(history, 'loss', loss_log)
@@ -143,18 +191,19 @@ def train_model(model, dataset, log_args, warmup=True):
 
         #return model
 
+
 def evaluate_model(model, generators, logging=True):
 
     print('\n\nEVALUATION SESSION STARTED!\n\n')
     tr_loss = challenge_eval(model,generators.train_reader)
     val_loss = challenge_eval(model,generators.evalid_reader)
 
-    print('TOTAL LOSS:  Training: {}, Validation: {}, Test: {}'.format(tr_loss[0],val_loss[0],te_loss[0]))
+    print('TOTAL LOSS:  Training: {}, Validation: {}'.format(tr_loss[0],val_loss[0]))
     #tr_loss = model.evaluate(generators.train_reader)
     #val_loss = model.evaluate(generators.valid_reader)
     if logging:
-        header = ['out_dir','m','c','b','e','l','p','wxh', 'train_loss', 'valid_loss', 'P','P_val','K','K_val', 'Mg','Mg_val','pH', 'pH_val']
-        info = [args.out_dir, args.model_type,args.channel_type,args.batch_size,args.num_epochs,args.learning_rate,args.pretrained,args.width,
+        header = ['out_dir','m','c','b','e','l','p','wxh','t', 'train_loss', 'valid_loss', 'P','P_val','K','K_val', 'Mg','Mg_val','pH', 'pH_val']
+        info = [args.out_dir, args.model_type,args.channel_type,args.batch_size,args.num_epochs,args.learning_rate,args.pretrained,args.width,args.temperature,
                 tr_loss[0], val_loss[0], tr_loss[1], val_loss[1],tr_loss[2], val_loss[2], tr_loss[3], val_loss[3],tr_loss[4], val_loss[4]]
         if not os.path.exists(args.out_dir+'/'+args.log_file):
             with open(args.out_dir+'/'+args.log_file, 'w') as file:
@@ -166,11 +215,11 @@ def evaluate_model(model, generators, logging=True):
                 logger = csv.writer(file)
                 logger.writerow(info)
 
-def create_submission(model, reader,log_args):
+def create_submission(model, dataset,log_args):
     print('\n\nSUBMISSION SESSION STARTED!\n\n')
     predictions = []
     files = []
-    for X, Y, file_name  in reader:
+    for X, Y, file_name  in dataset.eval_reader:
         y_pred = model.predict(X)
         y_pred = y_pred[0]
         #y_pred = np.concatenate(y_pred,axis=1)
@@ -197,7 +246,6 @@ def challenge_eval(model, reader):
     ground_truth = []
     y_base = np.array([121764.2 / 1731.0, 394876.1 / 1731.0, 275875.1 / 1731.0, 11747.67 / 1731.0]) /np.array([325.0, 625.0, 400.0, 7.8])
     for X, Y  in reader:
-
         y_pred = model.predict(X)
         y_pred = y_pred[0]
         #y_pred = np.concatenate(y_pred,axis=1)
@@ -231,6 +279,68 @@ def print_history(history, type, file_name):
     fig.savefig(file_name, dpi=fig.dpi)
 
 
+class NTXent(tf.keras.losses.Loss):
+    '''
+    THIS CLASS IMPLEMENTS Normalized Temperature-scaled Cross Entropy Loss FOR SIM-CLR BASED SELF-SUPERVISED LEARNING.
+    THE DETAILS CAN BE FOUND HERE: https://paperswithcode.com/method/nt-xent
+    '''
+
+    def __init__(self, tau=0.1):
+        '''
+        THIS IS THE CONSTRUCTOR OF THE CLASS.
+        :param tau: temperature parameter
+        :return: returns nothing
+        '''
+        super().__init__()
+        self.tau = tau
+        self.criterion = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
+
+
+    @tf.function
+    def calculate_loss(self, hidden):
+        '''
+        THIS FUNCTION CALCULATES Temperature-scaled Cross Entropy Loss.
+        :param hidden: concatenated output of the SimCLR architecture
+        :return: returns the loss value
+        '''
+        LARGE_NUM = 1e9
+        # hidden = tf.math.l2_normalize(hidden, -1)
+        hidden1, hidden2 = tf.split(hidden, 2, -1)
+
+        hidden1 = tf.math.l2_normalize(hidden1, -1)
+        hidden2 = tf.math.l2_normalize(hidden2, -1)
+
+        batch_size = tf.shape(hidden1)[0]
+
+        # Gather hidden1/hidden2 across replicas and create local labels.
+        hidden1_large = hidden1
+        hidden2_large = hidden2
+        labels = tf.one_hot(tf.range(batch_size), batch_size * 2)
+        masks = tf.one_hot(tf.range(batch_size), batch_size)
+
+        logits_aa = tf.matmul(hidden1, hidden1_large, transpose_b=True) / self.tau
+        logits_aa = logits_aa - masks * LARGE_NUM
+        logits_bb = tf.matmul(hidden2, hidden2_large, transpose_b=True) / self.tau
+        logits_bb = logits_bb - masks * LARGE_NUM
+        logits_ab = tf.matmul(hidden1, hidden2_large, transpose_b=True) / self.tau
+        logits_ba = tf.matmul(hidden2, hidden1_large, transpose_b=True) / self.tau
+
+        loss_a = self.criterion(labels, tf.concat([logits_ab, logits_aa], 1))
+        loss_b = self.criterion(labels, tf.concat([logits_ba, logits_bb], 1))
+        loss = loss_a + loss_b
+        return loss
+
+    def call(self, y_true, y_pred):
+        '''
+        THIS FUNCTION CALCULATES Temperature-scaled Cross Entropy Loss.
+        :param y_true: ground-truth labels, it is redundant in this loss calculation but preserved for possible future use cases
+        :param y_pred: predicted labels
+        :return: returns the loss value
+        '''
+        y_pred_1, y_pred_2 = tf.split(y_pred, 2, 0)
+        return self.calculate_loss(y_pred_1)
+
+
 class CustomMSE(tf.keras.losses.Loss):
 
     def __init__(self, idx=None):
@@ -249,6 +359,8 @@ class CustomMSE(tf.keras.losses.Loss):
         loss_base = K.mean(K.square(y_true - self.y_base), 0)
         loss = tf.math.divide(loss_raw, loss_base)
         return loss
+
+
 
 
 

@@ -5,23 +5,23 @@ from tensorflow import keras
 
 class InvertedRes(layers.Layer):
     def __init__(self, expand_channels, output_channels, strides=1):
-        super().__init__()
+        super().__init__(name='inverted_res')
         self.output_channels = output_channels
         self.strides = strides
         self.expand = keras.Sequential([
             layers.Conv2D(expand_channels, 1, padding="same", use_bias=False),
             layers.BatchNormalization(),
             layers.Activation('swish')
-        ], name="expand")
+        ])
         self.dw_conv = keras.Sequential([
             layers.DepthwiseConv2D(3, strides=strides, padding="same", use_bias=False),
             layers.BatchNormalization(),
             layers.Activation('swish')
-        ], name="depthwise")
+        ])
         self.pw_conv = keras.Sequential([
             layers.Conv2D(output_channels, 1, padding="same", use_bias=False),
             layers.BatchNormalization(),
-        ], name='pointwise')
+        ])
 
     def call(self, x):
         o = self.expand(x)
@@ -33,7 +33,7 @@ class InvertedRes(layers.Layer):
 
 class FullyConnected(layers.Layer):
   def __init__(self, hidden_units, dropout_rate):
-    super().__init__()
+    super().__init__(name='fully_connected')
     l = []
     for units in hidden_units:
       l.append(layers.Dense(units, activation=tf.nn.swish))
@@ -46,7 +46,7 @@ class FullyConnected(layers.Layer):
 
 class Transformer(layers.Layer):
     def __init__(self, projection_dim, heads=2):
-        super().__init__()
+        super().__init__(name='transformer')
         self.norm1 = layers.LayerNormalization(epsilon=1e-6)
         self.attention = layers.MultiHeadAttention(num_heads=heads, key_dim=projection_dim, dropout=0.1)
         self.norm2 = layers.LayerNormalization(epsilon=1e-6)
@@ -64,7 +64,7 @@ class Transformer(layers.Layer):
 
 class MobileVitBlock(layers.Layer):
   def __init__(self, num_blocks, projection_dim,patch_size=4, strides=1):
-    super().__init__()
+    super().__init__(name='mobile_vit_block')
     self.patch_size=patch_size
     self.projection_dim = projection_dim
     self.conv_local = keras.Sequential([
@@ -124,4 +124,38 @@ class MobileVit(keras.Model):
             super(MobileVit, self).__init__(inputs=inp, outputs=out1)
 
 
+
+class MobileVitC(keras.Model):
+    def __init__(self, input_shape, include_top=True,classifier_activation=None,
+                                                        num_classes=1000,expansion_ratio = 2.0):
+        inp=tf.keras.layers.Input(shape=input_shape)
+        features = keras.models.Sequential([
+                                                 layers.Conv2D(16, 16, padding="same", strides=(2, 2),
+                                                               activation=tf.nn.swish),
+                                                 InvertedRes(16 * expansion_ratio, 16, strides=1),
+                                                 InvertedRes(16 * expansion_ratio, 24, strides=2),
+                                                 InvertedRes(24 * expansion_ratio, 24, strides=1),
+                                                 InvertedRes(24 * expansion_ratio, 24, strides=1),
+                                                 InvertedRes(24 * expansion_ratio, 48, strides=2),
+                                                 MobileVitBlock(2, 64, strides=1),
+                                                 InvertedRes(64 * expansion_ratio, 64, strides=2),
+                                                 MobileVitBlock(4, 80, strides=1),
+                                                 InvertedRes(80 * expansion_ratio, 80, strides=2),
+                                                 MobileVitBlock(3, 96, strides=1),
+                                                 layers.Conv2D(320, 1, padding="same", strides=(1, 1),
+                                                               activation=tf.nn.swish)
+                                                 ], name="features")
+
+
+
+        head = keras.models.Sequential([layers.GlobalAvgPool2D(),
+                                             layers.Dense(num_classes, activation=classifier_activation)
+                                             ], name="logits")
+        out1 = features(inp)
+        out2 = head(out1)
+
+        if include_top:
+            super(MobileVitC, self).__init__(inputs=inp, outputs=out2)
+        else:
+            super(MobileVitC, self).__init__(inputs=inp, outputs=out1)
 

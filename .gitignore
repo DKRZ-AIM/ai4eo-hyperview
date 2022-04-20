@@ -1,2 +1,6 @@
 *.ipynb_checkpoints*
 *.csv
+hyperview/random_forest/models/*
+hyperview/random_forest/images/*
+hyperview/random_forest/submissions/
+hyperview/random_forest/jobs/rf_*
