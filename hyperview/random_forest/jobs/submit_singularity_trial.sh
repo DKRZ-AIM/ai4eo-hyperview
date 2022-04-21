@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=rf-aug
+#SBATCH --job-name=rf-small
 #SBATCH --partition=amd
 #SBATCH --nodes=1
 #SBATCH --mem=0

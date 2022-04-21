@@ -124,15 +124,19 @@ def load_gt(file_path: str, args):
 
     # in debug mode, only consider first 100 patches
     if args.debug:
-        gt_file = gt_file[:100]
+        gt_file = gt_file[:100]    
+    
+    # only 11x11 patches
+    #gt_file = gt_file[:650]
 
     labels = gt_file[["P", "K", "Mg", "pH"]].values/np.array([325.0, 625.0, 400.0, 7.8]) # normalize ground-truth between 0-1
     
     return labels
 
 def preprocess(data_list, mask_list):
-
+    
     def _shape_pad(data):
+        
         max_edge = np.max(image.shape[1:])
         shape = (max_edge, max_edge)
         padded = np.pad(data,((0, 0),
@@ -140,6 +144,17 @@ def preprocess(data_list, mask_list):
                              (0, (shape[1] - data.shape[2]))),
                              'wrap')
         return padded
+
+    def _random_pixel(data):
+        '''draws (min_sample_size x min_sample_size) patches from each patch''' 
+        
+        min_edge = 11
+        shape = (min_edge, min_edge)
+
+        random_select = [np.random.choice(data[i].flatten(), min_edge*min_edge, replace=False).reshape(shape) for i in range(data.shape[0])]
+        random_select = np.array(random_select)
+
+        return random_select
 
     filtering = SpectralCurveFiltering()
 
@@ -151,8 +166,8 @@ def preprocess(data_list, mask_list):
         data = data/2210 ## max-max=5419 mean-max=2210
         m = (1 - mask.astype(int))
         image = (data * m)
+        #image = _random_pixel(image) 
         image = _shape_pad(image)
-
         s = np.linalg.svd(image, full_matrices=False, compute_uv=False)
 
         data = np.ma.MaskedArray(data, mask)
@@ -177,9 +192,8 @@ def preprocess(data_list, mask_list):
     return np.array(processed_data)
 
 
-def mixing_augmentation(X, y, fract, mix_const):#fract=0.1):
+def mixing_augmentation(X, y, fract, mix_const):
 
-    #mix_const = 0.05
     mix_index_1 = np.random.randint(X.shape[0], size=int(np.floor(X.shape[0]*fract)))
     mix_index_2 = np.random.randint(X.shape[0], size=int(np.floor(X.shape[0]*fract)))
 
@@ -236,6 +250,12 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
 
     optimised_model.fit(X_processed, y_train_col)
     predictions = optimised_model.predict(X_test)
+    
+    #if args.col_ix == 4:
+    #    # revert normalization of 1st and second idx 
+    #    predictions[:,0] = np.expm1(predictions[:,0])
+    #    predictions[:,1] = np.expm1(predictions[:,1])
+
     predictions = predictions * np.array(cons[:len(args.col_ix)])
     
     # calculate score on full training set
@@ -291,6 +311,12 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args, min_scor
         predictions.append(pp)
     predictions = np.asarray(predictions)
     predictions = np.mean(predictions, axis=0)
+    
+    #if args.col_ix == 4:
+    #    # revert normalization of 1st and second idx 
+    #    predictions[:,0] = np.expm1(predictions[:,0])
+    #    predictions[:,1] = np.expm1(predictions[:,1])
+
     predictions = predictions * np.array(cons[:len(args.col_ix)])
 
 
@@ -356,10 +382,19 @@ def main(args):
 
     print('preprocess test data ...')
     X_test = preprocess(X_test, M_test)
-    y_aug_train_col=y_aug_train[:, args.col_ix]
-
+    y_aug_train_col = y_aug_train[:, args.col_ix]
+    
     # selected set of labels
     y_train_col = y_train[:, args.col_ix]
+
+    # only for all 4 indices
+    #if args.col_ix == 4:
+    #    # first and second variables are log-distributed
+    #    y_aug_train_col[:,0] = np.log1p(y_aug_train_col[:,0])
+    #    y_aug_train_col[:,1] = np.log1p(y_aug_train_col[:,1])
+    #    y_train_col[:,0] = np.log1p(y_train_col[:,0])
+    #    y_train_col[:,1] = np.log1p(y_train_col[:,1])
+
 
     cons = np.array([325.0, 625.0, 400.0, 7.8])
   
@@ -389,7 +424,17 @@ def main(args):
 
             X_t = X_processed[ix_train]
             y_t = y_train_col[ix_train]
-        
+     
+            augment_constant = trial.suggest_int('augment_constant', 0, args.augment_constant, log=False)
+            augment_partition = trial.suggest_int('augment_partition', args.augment_partition[0], args.augment_partition[1], log=True)
+
+            for idy in range(augment_constant):
+                X_ta_1 = X_aug_processed[ix_train+(idy*len(y_train))]
+                y_ta_1 = y_aug_train_col[ix_train+(idy*len(y_train))]
+                X_t=np.concatenate((X_t,X_ta_1[-augment_partition:]),axis=0)
+                y_t=np.concatenate((y_t,y_ta_1[-augment_partition:]),axis=0)
+
+
             # mixing augmentation
             if args.mix_aug:
                 fract = trial.suggest_categorical('fract', args.fract)
