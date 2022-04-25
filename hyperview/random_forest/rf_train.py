@@ -206,6 +206,9 @@ def evaluation_score(args, y_v, y_hat, y_b, cons):
     score = 0
     for i in range(len(args.col_ix)):
         print(f'Soil idx {i} / {len(args.col_ix)-1}')
+        if len(args.col_ix) == 1:
+            y_v = y_v.reshape(-1,1)
+            y_hat = y_hat.reshape(-1,1)
         mse_model = mean_squared_error(y_v[:, i]*cons[i], y_hat[:, i]*cons[i])
         mse_bl = mean_squared_error(y_v[:, i]*cons[i], y_b[:, i]*cons[i])
 
@@ -215,7 +218,7 @@ def evaluation_score(args, y_v, y_hat, y_b, cons):
         print(f'Model MSE: {mse_model:.2f} ({1e2*(mse_model - mse_bl)/mse_bl:+.2f} %)')
         print(f'Evaluation score: {score/len(args.col_ix)}')
     
-    return score / 4       
+    return score / len(args.col_ix)       
 
 def print_feature_importances(feature_names, importances):
     
@@ -247,6 +250,8 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
                                                            max_depth=study.best_params['max_depth'],
                                                            min_child_weight=study.best_params['min_child_weight'],
                                                            verbosity=1))
+    if len(args.col_ix) == 1:
+        y_train_col = y_train_col.ravel()
 
     optimised_model.fit(X_processed, y_train_col)
     predictions = optimised_model.predict(X_test)
@@ -260,6 +265,8 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     
     # calculate score on full training set
     baseline = BaselineRegressor()
+    if len(args.col_ix) == 1:
+        y_train_col = y_train_col.reshape(-1,1)
     baseline.fit(X_processed, y_train_col)
     y_b = baseline.predict(X_processed)
     y_fulltrain_pred = optimised_model.predict(X_processed)
@@ -280,9 +287,12 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     
     # save the model
     if args.save_model:
-        output_file = os.path.join(args.model_dir, f"{final_model}_SIMPLE_{date_time}_"\
+        output_file = os.path.join(args.model_dir, f"{final_model}_SIMPLE_ix={args.col_ix}_{date_time}_"\
                 f"nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
-                f"minsl={study.best_params['min_samples_leaf']}.bin")
+                f"minsl={study.best_params['min_samples_leaf']}_"\
+                f"_aug_con={study.best_params['augment_constant']}_"\
+                f"aug_par={study.best_params['augment_partition']}"\
+                f".bin")
             
         with open(output_file, "wb") as f_out:
             joblib.dump(optimised_model, f_out)
@@ -295,7 +305,10 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
         if final_model=="RandomForest":
             submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_SIMPLE"\
                 f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
-                f"minsl={study.best_params['min_samples_leaf']}.csv"), index_label="sample_index")
+                f"minsl={study.best_params['min_samples_leaf']}"\
+                f"_aug_con={study.best_params['augment_constant']}_"\
+                f"aug_par={study.best_params['augment_partition']}"\
+                f".csv"), index_label="sample_index")
         else:
             submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_SIMPLE"\
                 f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
@@ -345,9 +358,9 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args, min_scor
                 submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_CV"\
                         f"{date_time}_nest={study.best_params['n_estimators']}_"\
                         f"maxd={study.best_params['max_depth']}_" \
-                        f"minsl={study.best_params['min_samples_leaf']}_"\
-                        #f"aug_con={study.best_params['augment_constant']}_"\
-                        #f"aug_par={study.best_params['augment_partition']}
+                        f"minsl={study.best_params['min_samples_leaf']}"\
+                        f"_aug_con={study.best_params['augment_constant']}_"\
+                        f"aug_par={study.best_params['augment_partition']}"\
                         f".csv"),index_label="sample_index")
             else:
                print(f"CV submission for {final_model} not supported")
@@ -481,7 +494,9 @@ def main(args):
                                                            max_depth=max_depth,
                                                            min_child_weight=min_child_weight,
                                                            verbosity=1))
-            
+            if len(args.col_ix) == 1:
+                y_t = y_t.ravel()
+
             model.fit(X_t, y_t)
             random_forests.append(model)
             print(f'{reg_name} score: {model.score(X_v, y_v)}')

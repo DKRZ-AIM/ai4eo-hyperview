@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=rf-small
+#SBATCH --job-name=rf-ix0
 #SBATCH --partition=amd
 #SBATCH --nodes=1
 #SBATCH --mem=0
@@ -8,7 +8,8 @@
 #SBATCH --mail-type=FAIL
 #SBATCH --account=k20200
 #SBATCH --output=rf_out.o%j
-#SBATCH --error=rf_err.e%j
+#SBATCH --error=rf_err.e%j 
+#SBATCH --nodelist=vader3
 
 hostname
 
@@ -31,7 +32,7 @@ cd $codedir
 PYTHONPATH=$PYTHONPATH:"$codedir"
 export PYTHONPATH
 
-python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --n-trials 200 --n-estimators 800 1200 --max-depth 200 500 --max-depth-none --min-samples-leaf 1 3 5 --regressors RandomForest --folds 10 
+python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --n-trials 200 --n-estimators 500 1200 --max-depth 200 500 --max-depth-none --min-samples-leaf 1 5 10 20 --regressors RandomForest --folds 5 --col-ix 0 --save-model --model-dir $codedir/models 
 
 EOF
 
