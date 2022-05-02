@@ -2,5 +2,7 @@
 *.csv
 hyperview/random_forest/models/*
 hyperview/random_forest/images/*
-hyperview/random_forest/submissions/
+hyperview/random_forest/submissions/*
 hyperview/random_forest/jobs/rf_*
+hyperview/random_forest/evaluation/*
+hyperview/random_forest/__pycache__/*

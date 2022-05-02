@@ -415,6 +415,13 @@ def main(args):
     best_model = None
     global min_score
     min_score = np.inf
+    global y_hat_bls 
+    y_hat_bls = []
+    global y_hat_rfs
+    y_hat_rfs = []
+    global y_vs 
+    y_vs = []
+
 
     def objective(trial):
         global best_model
@@ -426,8 +433,6 @@ def main(args):
     
         random_forests = []
         baseline_regressors = []
-        y_hat_bl = []
-        y_hat_rf = []
         scores = []
 
         print("START TRAINING ...")
@@ -478,9 +483,9 @@ def main(args):
                                            criterion="squared_error")
             else:
                 n_estimators =  trial.suggest_int('n_estimators', args.n_estimators[0], args.n_estimators[1], log=True)
-                eta = trial. suggest_float('eta', args.eta[0], args.eta[1], log=True)
-                gamma = trial. suggest_float('gamma', args.gamma[0], args.gamma[1])
-                alpha = trial. suggest_float('alpha', args.alpha[0], args.alpha[1])
+                eta = trial.suggest_float('eta', args.eta[0], args.eta[1], log=True)
+                gamma = trial.suggest_float('gamma', args.gamma[0], args.gamma[1])
+                alpha = trial.suggest_float('alpha', args.alpha[0], args.alpha[1])
                 max_depth = trial. suggest_categorical('max_depth', args.max_depth)
                 min_child_weight = trial. suggest_categorical('min_child_weight', args.min_child_weight)
 
@@ -505,8 +510,11 @@ def main(args):
             y_hat = model.predict(X_v)
             y_b = baseline.predict(X_v)
 
-            y_hat_bl.append(y_b)
-            y_hat_rf.append(y_hat)
+
+            # save y_hat and y_v for evaluation
+            y_hat_bls.append(y_b)
+            y_hat_rfs.append(y_hat)
+            y_vs.append(y_v)
 
             # evaluation score
             score = evaluation_score(args, y_v, y_hat, y_b, cons)
@@ -531,9 +539,16 @@ def main(args):
     final_model = study.best_params["regressor"]
 
     if args.debug == False and final_model=="RandomForest":
-        output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_minsl={study.best_params['min_samples_leaf']}.pkl")
+        output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_"\
+                                        f"nest={study.best_params['n_estimators']}_"\
+                                        f"maxd={study.best_params['max_depth']}_"\
+                                        f"minsl={study.best_params['min_samples_leaf']}.pkl")
     if args.debug == False and final_model=="XGB":
-        output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_eta={eta}_gamma={gamma}_alpha={alpha}_minsl={study.best_params['min_child_weight']}.pkl")
+        output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_"\
+                                        f"nest={study.best_params['n_estimators']}_"\
+                                        f"maxd={study.best_params['max_depth']}_eta={eta}_"\
+                                        f"gamma={gamma}_alpha={alpha}_"\
+                                        f"minsl={study.best_params['min_child_weight']}.pkl")
 
     if args.debug == False:
         with open(output_file, "wb") as f_out:
@@ -547,6 +562,27 @@ def main(args):
     predictions_and_submission_2(study, best_model, X_test, cons, args,min_score)
     print("PREDICTIONS AND SUBMISSION FINISHED")
 
+    # save y_vs and y_hats
+    y_hat_bls = np.concatenate(y_hat_bls, axis=0)
+    y_hat_rfs = np.concatenate(y_hat_rfs, axis=0)
+    y_vs = np.concatenate(y_vs, axis=0)
+    eval_name_bls = f"y_hat_bls_{final_model}_{date_time}_"\
+                f"nest={study.best_params['n_estimators']}_"\
+                f"maxd={study.best_params['max_depth']}_"\
+                f"minsl={study.best_params['min_samples_leaf']}"
+    eval_name_rfs = f"y_hat_rfs_{final_model}_{date_time}_"\
+                f"nest={study.best_params['n_estimators']}_"\
+                f"maxd={study.best_params['max_depth']}_"\
+                f"minsl={study.best_params['min_samples_leaf']}"
+    eval_name_vs = f"y_vs_{final_model}_{date_time}_"\
+                f"nest={study.best_params['n_estimators']}_"\
+                f"maxd={study.best_params['max_depth']}_"\
+                f"minsl={study.best_params['min_samples_leaf']}"
+
+    if args.save_eval:
+        np.save(os.path.join(args.eval_dir, eval_name_bls), y_hat_bls)
+        np.save(os.path.join(args.eval_dir, eval_name_rfs), y_hat_rfs)
+        np.save(os.path.join(args.eval_dir, eval_name_vs), y_vs)
 
 if __name__ == "__main__":
 
@@ -560,13 +596,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', default=False)
     parser.add_argument('--in-data', type=str, 
-            default='/p/project/hai_cons_ee/kuzu/ai4eo-hyperview/hyperview/keras/')
+            default='/mnt/lustre02/work/ka1176/shared_data/2022-ai4eo_hyperview')
     parser.add_argument('--submission-dir', type=str, 
-            default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/submissions')
+            default='/mnt/lustre02/work/ka1176/frauke/ai4eo-hyperview/hyperview/random_forest/submissions')
     parser.add_argument('--model-dir', type=str, 
-            default='/p/project/hai_cons_ee/frauke/ai4eo-hyperview/hyperview/random_forest/models')
-    parser.add_argument('--save-pred', action='store_true', default=False)
+            default='/mnt/lustre02/work/ka1176/frauke/ai4eo-hyperview/hyperview/random_forest/models')
+    parser.add_argument('--eval-dir', type=str, 
+            default='/mnt/lustre02/work/ka1176/frauke/ai4eo-hyperview/hyperview/random_forest/evaluation')
     parser.add_argument('--save-model', action='store_true', default=False)
+    parser.add_argument('--save-pred', action='store_true', default=False)
+    parser.add_argument('--save-eval', action='store_true', default=False)
     parser.add_argument('--col-ix', type=int, nargs='+', default=[0, 1, 2, 3])
     parser.add_argument('--folds', type=int, default=5)
     # model hyperparams
