@@ -81,6 +81,10 @@ def load_data(directory: str, file_path, istrain, args):
     if args.debug:
         all_files = all_files[:100]
 
+    # only 11x11 patches
+    #all_files = all_files[:650]
+
+
     for file_name in all_files:
         with np.load(file_name) as npz:
             mask = npz['mask']
@@ -381,8 +385,8 @@ def main(args):
     X_train, M_train, y_train, X_aug_train, M_aug_train, y_aug_train = load_data(train_data, train_gt, True, args)
     print(f"loading train data took {time.time() - start_time:.2f}s")
     print(f"train data size: {len(X_train)}")
-    if args.debug==False:
-        print(f"patch size examples: {X_train[0].shape}, {X_train[500].shape}, {X_train[1000].shape}")
+    #if args.debug==False:
+    #    print(f"patch size examples: {X_train[0].shape}, {X_train[500].shape}, {X_train[1000].shape}")
     
     start_time = time.time()
     X_test, M_test = load_data(test_data, None, False, args)
@@ -568,7 +572,7 @@ def main(args):
     y_vs = np.concatenate(y_vs, axis=0)
     eval_name_bls = f"y_hat_bls_{final_model}_{date_time}_"\
                 f"nest={study.best_params['n_estimators']}_"\
-                f"maxd={study.best_params['max_depth']}_"\
+                f"maxd={study.best_params['max_depth']}"\
                 f"minsl={study.best_params['min_samples_leaf']}"
     eval_name_rfs = f"y_hat_rfs_{final_model}_{date_time}_"\
                 f"nest={study.best_params['n_estimators']}_"\
