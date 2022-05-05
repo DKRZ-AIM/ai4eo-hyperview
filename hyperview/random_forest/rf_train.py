@@ -14,6 +14,7 @@ from sklearn.model_selection import KFold
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error
 from sklearn.multioutput import MultiOutputRegressor
+from sklearn.neighbors import KernelDensity
 import xgboost as xgb
 
 import joblib
@@ -21,6 +22,8 @@ import optuna
 from optuna.samplers import TPESampler
 
 import sys
+
+import smogn
 
 class BaselineRegressor():
     """
@@ -82,7 +85,7 @@ def load_data(directory: str, file_path, istrain, args):
         all_files = all_files[:100]
 
     # only 11x11 patches
-    #all_files = all_files[:650]
+    all_files = all_files[:650]
 
 
     for file_name in all_files:
@@ -131,7 +134,7 @@ def load_gt(file_path: str, args):
         gt_file = gt_file[:100]    
     
     # only 11x11 patches
-    #gt_file = gt_file[:650]
+    gt_file = gt_file[:650]
 
     labels = gt_file[["P", "K", "Mg", "pH"]].values/np.array([325.0, 625.0, 400.0, 7.8]) # normalize ground-truth between 0-1
     
@@ -195,6 +198,30 @@ def preprocess(data_list, mask_list):
 
     return np.array(processed_data)
 
+def loss(y, eps=0.0001, alpha=1.):
+    '''
+    function to calculate normalized weights based on the kernel estimation or each soil paramter separately
+    '''
+    y = y.reshape(-1,1)
+    kde = KernelDensity(kernel='gaussian', bandwidth=1).fit(y)
+    # score_samples returns the log of the probability density
+    x_d = np.linspace(np.min(y), np.max(y), y.shape[0])
+
+    logprob = kde.score_samples(x_d[:, None])
+    distr = np.exp(logprob)
+    distr_prime = (distr - np.min(distr, axis=0))/(np.max(distr, axis=0) - np.min(distr, axis=0))
+
+    eps_array = np.zeros(distr_prime.shape)
+    eps_array.fill(eps)
+    weights = np.max([(1 - alpha*distr_prime), eps_array], axis=0)
+    
+    norm = 1/distr_prime.shape[0] * np.sum(np.max([(1 - alpha*distr_prime), eps_array], axis=0))
+
+    weights_norm = weights/norm
+
+    # calculate rmse loss with weights
+
+    return distr, weights_norm
 
 def mixing_augmentation(X, y, fract, mix_const):
 
@@ -205,6 +232,20 @@ def mixing_augmentation(X, y, fract, mix_const):
     ma_y = (1 - mix_const) * y[mix_index_1] + mix_const * (y[mix_index_2])
 
     return np.concatenate([X, ma_X], 0), np.concatenate([y, ma_y], 0)
+
+
+def smogn_overs(X, y, col):
+        ''' oversampling '''
+        train = np.concatenate([X, y[:,col].reshape(-1,1)],  axis=1)
+        features = np.arange(X.shape[1])
+        df = pd.DataFrame(train, columns=(list(features) + ['y']))
+        hyper_smogn = smogn.smoter(
+            data = df,
+            y = 'y'
+            )
+        return hyper_smogn
+ 
+
 
 def evaluation_score(args, y_v, y_hat, y_b, cons):
     score = 0
@@ -260,11 +301,6 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     optimised_model.fit(X_processed, y_train_col)
     predictions = optimised_model.predict(X_test)
     
-    #if args.col_ix == 4:
-    #    # revert normalization of 1st and second idx 
-    #    predictions[:,0] = np.expm1(predictions[:,0])
-    #    predictions[:,1] = np.expm1(predictions[:,1])
-
     predictions = predictions * np.array(cons[:len(args.col_ix)])
     
     # calculate score on full training set
@@ -329,11 +365,6 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args, min_scor
     predictions = np.asarray(predictions)
     predictions = np.mean(predictions, axis=0)
     
-    #if args.col_ix == 4:
-    #    # revert normalization of 1st and second idx 
-    #    predictions[:,0] = np.expm1(predictions[:,0])
-    #    predictions[:,1] = np.expm1(predictions[:,1])
-
     predictions = predictions * np.array(cons[:len(args.col_ix)])
 
 
@@ -399,22 +430,24 @@ def main(args):
 
     print('preprocess test data ...')
     X_test = preprocess(X_test, M_test)
-    y_aug_train_col = y_aug_train[:, args.col_ix]
     
     # selected set of labels
+    y_aug_train_col = y_aug_train[:, args.col_ix]
     y_train_col = y_train[:, args.col_ix]
 
-    # only for all 4 indices
-    #if args.col_ix == 4:
-    #    # first and second variables are log-distributed
-    #    y_aug_train_col[:,0] = np.log1p(y_aug_train_col[:,0])
-    #    y_aug_train_col[:,1] = np.log1p(y_aug_train_col[:,1])
-    #    y_train_col[:,0] = np.log1p(y_train_col[:,0])
-    #    y_train_col[:,1] = np.log1p(y_train_col[:,1])
-
-
     cons = np.array([325.0, 625.0, 400.0, 7.8])
-  
+ 
+    # oversampling - only for simple linear regression!!
+    if args.smogn and len(args.col_ix)==1:
+        smogn_train = smogn_overs(X_processed, y_train_col, args.col_ix[0])
+        print(f'smogn on idx {args.col_ix[0]}')
+        print(f'train data shape after smogn: {smogn_train.shape}')
+        smogn_train = np.array(smogn_train)
+        X_processed = smogn_train[:,:-1]
+        y_train_col = smogn_train[:,-1].reshape(-1,1)
+        print(f'X train data shape after smogn: {X_processed.shape}')
+        print(f'y train data shape after smogn: {y_train_col.shape}')
+
     global best_model
     best_model = None
     global min_score
@@ -440,7 +473,7 @@ def main(args):
         scores = []
 
         print("START TRAINING ...")
-        for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(y_train)))):
+        for i, (ix_train, ix_valid) in enumerate(kfold.split(np.arange(0, len(y_train_col)))):
         
             print(f'fold {i}:')
 
@@ -514,7 +547,6 @@ def main(args):
             y_hat = model.predict(X_v)
             y_b = baseline.predict(X_v)
 
-
             # save y_hat and y_v for evaluation
             y_hat_bls.append(y_b)
             y_hat_rfs.append(y_hat)
@@ -563,7 +595,7 @@ def main(args):
     # train best model on full training set
     predictions_and_submission(study, X_processed, X_test, y_train_col, cons, args)
     # cross validation on validation set
-    predictions_and_submission_2(study, best_model, X_test, cons, args,min_score)
+    predictions_and_submission_2(study, best_model, X_test, cons, args, min_score)
     print("PREDICTIONS AND SUBMISSION FINISHED")
 
     # save y_vs and y_hats
@@ -621,7 +653,7 @@ if __name__ == "__main__":
     parser.add_argument('--gamma', type=float, nargs='+', default=[0, 1]) # default=0
     parser.add_argument('--alpha', type=float, nargs='+', default=[0, 1]) # default=0
     parser.add_argument('--min-child_weight', type=int, nargs='+', default=[1, 10, 50])
-    parser.add_argument('--regressors', type=str, nargs='+', default=["RandomForest", "XGB"])
+    parser.add_argument('--regressors', type=str, nargs='+', default=["RandomForest"])
     parser.add_argument('--n-trials', type=int, default=100)
     # augmentation
     parser.add_argument('--mix-aug', action='store_true', default=False)
@@ -629,6 +661,7 @@ if __name__ == "__main__":
     parser.add_argument('--mix-const', type=float, nargs='+', default=[0.05])
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
+    parser.add_argument('--smogn', action='store_true', default=False)
 
 
     args = parser.parse_args()
@@ -643,7 +676,13 @@ if __name__ == "__main__":
     print('END argparse key - value pairs')
     print()
 
+    if args.smogn:
+        assert len(args.col_ix) == 1, 'smogn oversampling only for simple output regression (len(col_ix==1)) possible'
+
     cols = ["P205", "K", "Mg", "pH"]
     
+    feature_names = ['arr', 'dXdl', 'd2Xdl2', 'd3Xdl3', 'dXds1', 's_0',
+                         's_1', 's_2', 's_3', 's_4', 'real', 'imag']
+
     main(args)
 

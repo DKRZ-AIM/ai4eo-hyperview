@@ -103,4 +103,6 @@ dependencies:
   - zeromq=4.3.4=h2531618_0
   - zipp=3.8.0=pyhd8ed1ab_0
   - zlib=1.2.11=h7f8727e_4
+  - pip:
+    - smogn==0.1.2
 prefix: /home/dkrz/k202143/miniconda3/envs/ai4eo_hyper

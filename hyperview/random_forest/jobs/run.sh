@@ -12,5 +12,5 @@ cd $codedir
 PYTHONPATH=$PYTHONPATH:"$codedir"
 export PYTHONPATH
 
-python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --n-trials 100 --n-estimators 1000 1200 --max-depth 200 500 --max-depth-none --min-samples-leaf 1 5 10 20 --regressors RandomForest --folds 5 --save-eval --eval-dir $codedir/evaluation --save-model --model-dir $codedir/models 
+python3 rf_train.py --in-data $datadir --submission-dir $codedir/submissions --n-trials 100 --n-estimators 800 1200 --max-depth 200 500 --max-depth-none --min-samples-leaf 1 5 --regressors RandomForest --folds 5 --save-eval --eval-dir $codedir/evaluation --save-model --model-dir $codedir/models --smogn --col-ix 0
 
