@@ -85,7 +85,7 @@ def load_data(directory: str, file_path, istrain, args):
         all_files = all_files[:100]
 
     # only 11x11 patches
-    all_files = all_files[:650]
+    #all_files = all_files[:650]
 
 
     for file_name in all_files:
@@ -134,7 +134,7 @@ def load_gt(file_path: str, args):
         gt_file = gt_file[:100]    
     
     # only 11x11 patches
-    gt_file = gt_file[:650]
+    #gt_file = gt_file[:650]
 
     labels = gt_file[["P", "K", "Mg", "pH"]].values/np.array([325.0, 625.0, 400.0, 7.8]) # normalize ground-truth between 0-1
     
@@ -198,19 +198,37 @@ def preprocess(data_list, mask_list):
 
     return np.array(processed_data)
 
-def loss(y, eps=0.0001, alpha=1.):
+def gradient(y_hat, y, weights):
+    '''returns gradient of weigthed rmse'''
+    n = y_hat.shape[0]
+    grad = -2*weights*(y_hat-y)
+    return grad
+
+def hessian(y_hat, y, weights):
+    n = y_hat.shape[0]
+    hess = 2*weights
+    return hess
+
+def rmse_weighted(y, y_hat):#(y_hat, y):
+    weights, _ = weighted_loss(y_hat, y)
+    #weights = 1.
+    grad = gradient(y_hat, y, weights)
+    hess = hessian(y_hat, y, weights)
+    return grad, hess
+
+
+def weighted_loss(y_hat, y, eps=0.0001, alpha=1.):
     '''
     function to calculate normalized weights based on the kernel estimation or each soil paramter separately
+    These weights are the used for RMSE loss
     '''
     y = y.reshape(-1,1)
     kde = KernelDensity(kernel='gaussian', bandwidth=1).fit(y)
     # score_samples returns the log of the probability density
     x_d = np.linspace(np.min(y), np.max(y), y.shape[0])
-
     logprob = kde.score_samples(x_d[:, None])
     distr = np.exp(logprob)
     distr_prime = (distr - np.min(distr, axis=0))/(np.max(distr, axis=0) - np.min(distr, axis=0))
-
     eps_array = np.zeros(distr_prime.shape)
     eps_array.fill(eps)
     weights = np.max([(1 - alpha*distr_prime), eps_array], axis=0)
@@ -219,9 +237,10 @@ def loss(y, eps=0.0001, alpha=1.):
 
     weights_norm = weights/norm
 
-    # calculate rmse loss with weights
+    mse_weighted = (np.square(weights_norm*np.subtract(y, y_hat))).mean()
+    rmse_weighted = np.sqrt(mse_weighted)
 
-    return distr, weights_norm
+    return weights_norm, rmse_weighted
 
 def mixing_augmentation(X, y, fract, mix_const):
 
@@ -287,20 +306,30 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
                                              n_jobs=-1, 
                                              criterion="squared_error")
     else:
-        optimised_model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
-                                                           n_estimators=study.best_params['n_estimators'],
-                                                           eta=study.best_params['eta'],
-                                                           gamma=study.best_params['gamma'],
-                                                           alpha=study.best_params['alpha'],
-                                                           max_depth=study.best_params['max_depth'],
-                                                           min_child_weight=study.best_params['min_child_weight'],
-                                                           verbosity=1))
+        parameters = {"objective": 'reg:squarederror',
+                      "n_estimators": study.best_params['n_estimators'],
+                      "eta": study.best_params['eta'],
+                      "gamma": study.best_params['gamma'],
+                      "alpha": study.best_params['alpha'],
+                      "max_depth": study.best_params['max_depth'],
+                      "min_child_weight": study.best_params['min_child_weight'],
+                      "verbosity": 1}
+
+        if len(args.col_ix)==1:
+            if args.weights:
+                parameters["objective"] = rmse_weighted
+            optimised_model = xgb.XGBRegressor(**parameters)
+
+        else:
+            optimised_model = MultiOutputRegressor(xgb.XGBRegressor(**parameters))
+
     if len(args.col_ix) == 1:
         y_train_col = y_train_col.ravel()
 
     optimised_model.fit(X_processed, y_train_col)
     predictions = optimised_model.predict(X_test)
-    
+   
+
     predictions = predictions * np.array(cons[:len(args.col_ix)])
     
     # calculate score on full training set
@@ -314,12 +343,12 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     score = evaluation_score(args, y_train_col, y_fulltrain_pred, y_b, cons)
     print(f'\nScore of best model ({final_model}) on training set: {score}\n')
 
-    # print feature importances
+    # print feature importances for RF
     feature_names=['arr','dXdl', 'd2Xdl2', 's_0', 's_1', 's_2', 's_3', 's_4', 'real', 'imag']
-    if final_model == 'RandomForest':
+    if final_model == 'RandomForest' or len(args.col_ix)==1:
         importances = optimised_model.feature_importances_
         print_feature_importances(feature_names, importances)
-    else:
+    elif final_model == 'XGB' and len(args.col_ix) > 1:
         for i in range(len(optimised_model.estimators_)):
             importances = optimised_model.estimators_[i].feature_importances_
             
@@ -338,22 +367,26 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
             joblib.dump(optimised_model, f_out)
 
     # only make submission file, if all 4 soil parameters are considered
-    # only predictions from RF are saved!
     if len(args.col_ix) == 4 and  args.debug==False:
         submission = pd.DataFrame(data=predictions, columns=["P", "K", "Mg", "pH"])
         print(submission.head())
         if final_model=="RandomForest":
             submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_SIMPLE"\
                 f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
-                f"minsl={study.best_params['min_samples_leaf']}"\
-                f"_aug_con={study.best_params['augment_constant']}_"\
+                f"minsl={study.best_params['min_samples_leaf']}_"\
+                f"aug_con={study.best_params['augment_constant']}_"\
                 f"aug_par={study.best_params['augment_partition']}"\
                 f".csv"), index_label="sample_index")
         else:
             submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_SIMPLE"\
                 f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
-                f"eta={eta}_gamma={gamma}_alpha={alpha}"\
-                f"minsl={study.best_params['min_child_weight']}.csv"), index_label="sample_index")
+                f"eta={study.best_params['eta']}_"\
+                f"gamma={study.best_params['gamma']}_"\
+                f"alpha={study.best_params['alpha']}_"\
+                f"minsl={study.best_params['min_child_weight']}_"
+                f"aug_con={study.best_params['augment_constant']}_"\
+                f"aug_par={study.best_params['augment_partition']}"\
+                f".csv"), index_label="sample_index")
 
 
 def predictions_and_submission_2(study, best_model, X_test, cons, args, min_score):
@@ -398,7 +431,16 @@ def predictions_and_submission_2(study, best_model, X_test, cons, args, min_scor
                         f"aug_par={study.best_params['augment_partition']}"\
                         f".csv"),index_label="sample_index")
             else:
-               print(f"CV submission for {final_model} not supported")
+                submission.to_csv(os.path.join(args.submission_dir, f"submission_{final_model}_CV"\
+                        f"{date_time}_nest={study.best_params['n_estimators']}_"\
+                        f"maxd={study.best_params['max_depth']}_" \
+                        f"eta={study.best_params['eta']}_"\
+                        f"gamma={study.best_params['gamma']}_"\
+                        f"alpha={study.best_params['alpha']}_"\
+                        f"aug_con={study.best_params['augment_constant']}_"\
+                        f"aug_par={study.best_params['augment_partition']}"\
+                        f".csv"),index_label="sample_index")
+
         else:
             submission.to_csv(os.path.join(args.submission_dir, "submission_best_{}.csv".format(min_score)),
                     index_label="sample_index")
@@ -416,8 +458,8 @@ def main(args):
     X_train, M_train, y_train, X_aug_train, M_aug_train, y_aug_train = load_data(train_data, train_gt, True, args)
     print(f"loading train data took {time.time() - start_time:.2f}s")
     print(f"train data size: {len(X_train)}")
-    #if args.debug==False:
-    #    print(f"patch size examples: {X_train[0].shape}, {X_train[500].shape}, {X_train[1000].shape}")
+    if args.debug==False:
+        print(f"patch size examples: {X_train[0].shape}, {X_train[500].shape}, {X_train[1000].shape}")
     
     start_time = time.time()
     X_test, M_test = load_data(test_data, None, False, args)
@@ -434,10 +476,11 @@ def main(args):
     # selected set of labels
     y_aug_train_col = y_aug_train[:, args.col_ix]
     y_train_col = y_train[:, args.col_ix]
+    y_train_col_copy = y_train_col
 
     cons = np.array([325.0, 625.0, 400.0, 7.8])
  
-    # oversampling - only for simple linear regression!!
+    # oversampling - only for simple regression!!
     if args.smogn and len(args.col_ix)==1:
         smogn_train = smogn_overs(X_processed, y_train_col, args.col_ix[0])
         print(f'smogn on idx {args.col_ix[0]}')
@@ -528,16 +571,23 @@ def main(args):
 
 
                 # xgboost
-                model = MultiOutputRegressor(xgb.XGBRegressor(objective='reg:squarederror',
-                                                           n_estimators=n_estimators,
-                                                           eta=eta,
-                                                           gamma=gamma,
-                                                           alpha=alpha,
-                                                           max_depth=max_depth,
-                                                           min_child_weight=min_child_weight,
-                                                           verbosity=1))
-            if len(args.col_ix) == 1:
-                y_t = y_t.ravel()
+                parameters = {"objective": 'reg:squarederror',
+                              "n_estimators": n_estimators,
+                              "eta": eta,
+                              "gamma": gamma,
+                              "alpha": alpha,
+                              "max_depth": max_depth,
+                              "min_child_weight": min_child_weight,
+                              "verbosity": 1}
+
+                if len(args.col_ix)==1:
+                    y_t = y_t.ravel()
+                    if args.weights:
+                        parameters["objective"] = rmse_weighted
+                    model = xgb.XGBRegressor(**parameters)
+
+                else:
+                    model = MultiOutputRegressor(xgb.XGBRegressor(**parameters))
 
             model.fit(X_t, y_t)
             random_forests.append(model)
@@ -552,6 +602,7 @@ def main(args):
             y_hat_rfs.append(y_hat)
             y_vs.append(y_v)
 
+
             # evaluation score
             score = evaluation_score(args, y_v, y_hat, y_b, cons)
             scores.append(score)
@@ -564,7 +615,7 @@ def main(args):
         if mean_score < min_score:
             min_score = mean_score
             best_model = random_forests
-            predictions_and_submission_2(None, best_model, X_test, cons, args, min_score)
+            #predictions_and_submission_2(None, best_model, X_test, cons, args, min_score)
 
         return mean_score
     
@@ -602,18 +653,24 @@ def main(args):
     y_hat_bls = np.concatenate(y_hat_bls, axis=0)
     y_hat_rfs = np.concatenate(y_hat_rfs, axis=0)
     y_vs = np.concatenate(y_vs, axis=0)
-    eval_name_bls = f"y_hat_bls_{final_model}_{date_time}_"\
-                f"nest={study.best_params['n_estimators']}_"\
-                f"maxd={study.best_params['max_depth']}"\
-                f"minsl={study.best_params['min_samples_leaf']}"
-    eval_name_rfs = f"y_hat_rfs_{final_model}_{date_time}_"\
-                f"nest={study.best_params['n_estimators']}_"\
-                f"maxd={study.best_params['max_depth']}_"\
-                f"minsl={study.best_params['min_samples_leaf']}"
-    eval_name_vs = f"y_vs_{final_model}_{date_time}_"\
-                f"nest={study.best_params['n_estimators']}_"\
-                f"maxd={study.best_params['max_depth']}_"\
-                f"minsl={study.best_params['min_samples_leaf']}"
+    if final_model == 'RandomForest':
+        main_name = f"_{date_time}_"\
+                    f"nest={study.best_params['n_estimators']}_"\
+                    f"maxd={study.best_params['max_depth']}"\
+                    f"minsl={study.best_params['min_samples_leaf']}"
+        eval_name_bls = f"y_hat_bls_{final_model}_{date_time}_" + main_name
+        eval_name_rfs = f"y_hat_rfs_{final_model}_{date_time}_" + main_name
+        eval_name_vs = f"y_vs_{final_model}_{date_time}_" + main_name
+    else:
+         main_name = f"nest={study.best_params['n_estimators']}_"\
+                    f"maxd={study.best_params['max_depth']}"\
+                    f"eta={study.best_params['eta']}"\
+                    f"gamma={study.best_params['gamma']}"\
+                    f"alpha={study.best_params['alpha']}"\
+                    f"mincw={study.best_params['min_child_weight']}"
+         eval_name_bls = f"y_hat_bls_{final_model}_{date_time}_" + main_name
+         eval_name_rfs = f"y_hat_rfs_{final_model}_{date_time}_" + main_name
+         eval_name_vs = f"y_vs_{final_model}_{date_time}_" + main_name
 
     if args.save_eval:
         np.save(os.path.join(args.eval_dir, eval_name_bls), y_hat_bls)
@@ -662,6 +719,7 @@ if __name__ == "__main__":
     parser.add_argument('--augment-constant', type=int, default=5)
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--smogn', action='store_true', default=False)
+    parser.add_argument('--weights', action='store_true', default=False)
 
 
     args = parser.parse_args()
