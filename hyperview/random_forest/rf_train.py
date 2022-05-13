@@ -200,24 +200,21 @@ def preprocess(data_list, mask_list):
 
 def gradient(y_hat, y, weights):
     '''returns gradient of weigthed rmse'''
-    n = y_hat.shape[0]
-    grad = -2*weights*(y_hat-y)
+    grad = 2*weights*(y-y_hat)
     return grad
 
 def hessian(y_hat, y, weights):
-    n = y_hat.shape[0]
-    hess = 2*weights
+    hess = 2*weights#*np.repeat(2, y.shape[0])
     return hess
 
-def rmse_weighted(y, y_hat):#(y_hat, y):
-    weights, _ = weighted_loss(y_hat, y)
-    #weights = 1.
+def rmse_weighted(y, y_hat):
+    weights =  weights_loss(y)
     grad = gradient(y_hat, y, weights)
     hess = hessian(y_hat, y, weights)
     return grad, hess
 
 
-def weighted_loss(y_hat, y, eps=0.0001, alpha=1.):
+def weights_loss(y, eps=0.0001, alpha=1.):
     '''
     function to calculate normalized weights based on the kernel estimation or each soil paramter separately
     These weights are the used for RMSE loss
@@ -237,10 +234,7 @@ def weighted_loss(y_hat, y, eps=0.0001, alpha=1.):
 
     weights_norm = weights/norm
 
-    mse_weighted = (np.square(weights_norm*np.subtract(y, y_hat))).mean()
-    rmse_weighted = np.sqrt(mse_weighted)
-
-    return weights_norm, rmse_weighted
+    return weights_norm
 
 def mixing_augmentation(X, y, fract, mix_const):
 
