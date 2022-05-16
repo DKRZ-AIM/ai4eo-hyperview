@@ -198,21 +198,17 @@ def preprocess(data_list, mask_list):
 
     return np.array(processed_data)
 
-def gradient(y_hat, y, weights):
-    '''returns gradient of weigthed rmse'''
-    grad = 2*weights*(y-y_hat)
-    return grad
-
-def hessian(y_hat, y, weights):
-    hess = 2*weights#*np.repeat(2, y.shape[0])
-    return hess
-
-def rmse_weighted(y, y_hat):
-    weights =  weights_loss(y)
-    grad = gradient(y_hat, y, weights)
-    hess = hessian(y_hat, y, weights)
+def custom_loss(y, y_hat):
+    residual = (y_val - y_pred).astype("float")
+    grad = -500.0*residual
+    hess = 500.0 * np.repeat(1, y_val.shape[0])
     return grad, hess
 
+def rmse_weighted(y, y_hat):
+    weights =  np.repeat(1, y.shape[0])#weights_loss(y)
+    grad = 2*weights*(y-y_hat)
+    hess = 2*weights
+    return grad, hess
 
 def weights_loss(y, eps=0.0001, alpha=1.):
     '''
@@ -577,7 +573,7 @@ def main(args):
                 if len(args.col_ix)==1:
                     y_t = y_t.ravel()
                     if args.weights:
-                        parameters["objective"] = rmse_weighted
+                        parameters["objective"] = custom_loss#rmse_weighted
                     model = xgb.XGBRegressor(**parameters)
 
                 else:
@@ -627,8 +623,10 @@ def main(args):
     if args.debug == False and final_model=="XGB":
         output_file = os.path.join(args.submission_dir, f"study_{final_model}_{date_time}_"\
                                         f"nest={study.best_params['n_estimators']}_"\
-                                        f"maxd={study.best_params['max_depth']}_eta={eta}_"\
-                                        f"gamma={gamma}_alpha={alpha}_"\
+                                        f"maxd={study.best_params['max_depth']}_"\
+                                        f"eta={study.best_params['eta']}_"\
+                                        f"gamma={study.best_params['gamma']}_"\
+                                        f"alpha={study.best_params['alpha']}_"\
                                         f"minsl={study.best_params['min_child_weight']}.pkl")
 
     if args.debug == False:
