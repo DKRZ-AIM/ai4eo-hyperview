@@ -19,7 +19,7 @@ def make_submission(preds, model_names, args):
     submission = pd.DataFrame.from_dict(data=preds)
     submission.rename(columns = {'ix_0':'P', 'ix_1':'K', 'ix_2':'Mg', 'ix_3':'pH'}, inplace = True)
     print(submission.head())
-    submission.to_csv(os.path.join(args.submission_dir, f"submission_HYBRID"\
+    submission.to_csv(os.path.join(args.submission_dir, f"submission_HYBRID_XGB"\
             #f"model_ix0={names[0]}_"\
             #    f"model_ix1={names[1]}_"\
             #    f"model_ix2={names[2]}_"\

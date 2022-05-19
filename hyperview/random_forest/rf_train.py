@@ -198,10 +198,16 @@ def preprocess(data_list, mask_list):
 
     return np.array(processed_data)
 
-def custom_loss(y, y_hat):
+def assym_loss(y_val, y_pred):
+    factor = 50.
     residual = (y_val - y_pred).astype("float")
-    grad = -500.0*residual
-    hess = 500.0 * np.repeat(1, y_val.shape[0])
+    grad = np.where(residual<0, -2*factor*residual, -2*residual)
+    hess = np.where(residual<0, 2*factor, 2.0)
+    return grad, hess
+
+def cubic(y_val, y_pred):
+    grad = 4*(y_val -y_pred)**3
+    hess = 12*(y_val - y_pred)**2
     return grad, hess
 
 def rmse_weighted(y, y_hat):
@@ -306,8 +312,12 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
                       "verbosity": 1}
 
         if len(args.col_ix)==1:
-            if args.weights:
+            if args.objective == 'weighted_mse':
                 parameters["objective"] = rmse_weighted
+            if args.objective == 'cubic':
+                parameters["objective"] = cubic
+            if args.objective == 'asym':
+                parameters["objective"] = assym_loss
             optimised_model = xgb.XGBRegressor(**parameters)
 
         else:
@@ -346,12 +356,25 @@ def predictions_and_submission(study, X_processed, X_test, y_train_col, cons, ar
     
     # save the model
     if args.save_model:
-        output_file = os.path.join(args.model_dir, f"{final_model}_SIMPLE_ix={args.col_ix}_{date_time}_"\
+        if final_model=="RandomForest":
+            output_file = os.path.join(args.model_dir, f"{final_model}_SIMPLE_ix={args.col_ix}_{date_time}_"\
                 f"nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
                 f"minsl={study.best_params['min_samples_leaf']}_"\
                 f"_aug_con={study.best_params['augment_constant']}_"\
                 f"aug_par={study.best_params['augment_partition']}"\
                 f".bin")
+        else:
+            output_file = os.path.join(args.model_dir, f"{final_model}_SIMPLE_ix={args.col_ix}_"\
+                f"{date_time}_nest={study.best_params['n_estimators']}_maxd={study.best_params['max_depth']}_"\
+                f"eta={study.best_params['eta']}_"\
+                f"gamma={study.best_params['gamma']}_"\
+                f"alpha={study.best_params['alpha']}_"\
+                f"minsl={study.best_params['min_child_weight']}_"
+                f"aug_con={study.best_params['augment_constant']}_"\
+                f"aug_par={study.best_params['augment_partition']}"\
+                f".bin")
+
+
             
         with open(output_file, "wb") as f_out:
             joblib.dump(optimised_model, f_out)
@@ -572,13 +595,18 @@ def main(args):
 
                 if len(args.col_ix)==1:
                     y_t = y_t.ravel()
-                    if args.weights:
-                        parameters["objective"] = custom_loss#rmse_weighted
+                    if args.objective == 'weighted_mse':
+                        parameters["objective"] = rmse_weighted
+                    if args.objective == 'cubic':
+                        parameters["objective"] = cubic
+                    if args.objective == 'asym':
+                        parameters["objective"] = assym_loss
+                    
                     model = xgb.XGBRegressor(**parameters)
 
                 else:
                     model = MultiOutputRegressor(xgb.XGBRegressor(**parameters))
-
+            print(f"loss function used: {parameters['objective']}")
             model.fit(X_t, y_t)
             random_forests.append(model)
             print(f'{reg_name} score: {model.score(X_v, y_v)}')
@@ -712,6 +740,7 @@ if __name__ == "__main__":
     parser.add_argument('--augment-partition', type=int, nargs='+', default=[100, 350])
     parser.add_argument('--smogn', action='store_true', default=False)
     parser.add_argument('--weights', action='store_true', default=False)
+    parser.add_argument('--objective', type=str, default='mse', choices=['mse', 'weighted_mse', 'cubic', 'asym'])
 
 
     args = parser.parse_args()
