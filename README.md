@@ -1,6 +1,6 @@
 # AI4EO Hyperview
 
-This repository contains the contribution of the team EagleEyes to the ![AI4EO Hyperview Machine Learning Challenge](https://platform.ai4eo.eu/seeing-beyond-the-visible)
+This repository contains the contribution of the team EagleEyes to the [AI4EO Hyperview Machine Learning Challenge](https://platform.ai4eo.eu/seeing-beyond-the-visible)
 
 **Overview**
 
@@ -12,9 +12,9 @@ is computationally lightweight and improves upon the challenge baseline by 21%.
 
 **This Repository contains the following:**
 
-* A jupyter notebook containing the final solution can be found in ![final-submission](final-submission).
-* The folder ![notebooks](notebooks) contains some jupyter notebooks for data exploration and first simple models
-* We explored several other approaches, which can be found in ![hyperview](hyperview)
-    * Different Neural Network architectures (based on keras) ![NN keras](hyperview/keras])
-    * ![PSELTAE model](https://github.com/VSainteuf/pytorch-psetae) (based on pytorch-lightning) ![PSELTAE](hyperview/pytorch_lightning) 
-    * ![Random Forest and XGBoost models](random-forest)
+* A jupyter notebook containing the final solution can be found in [final-submission](final-submission).
+* The folder [notebooks](notebooks) contains some jupyter notebooks for data exploration and first simple models
+* We explored several other approaches, which can be found in [hyperview](hyperview)
+    * Different Neural Network architectures (based on keras) [NN keras](hyperview/keras])
+    * [PSELTAE model](https://github.com/VSainteuf/pytorch-psetae) (based on pytorch-lightning) [PSELTAE](hyperview/pytorch_lightning) 
+    * [Random Forest and XGBoost models](random-forest)
